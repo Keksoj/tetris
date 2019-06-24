@@ -1,7 +1,6 @@
 //2019-06-21
 // The graal is soon to be mine.
 
-mod tetrominoes;
 mod utils;
 
 use utils::Game;
