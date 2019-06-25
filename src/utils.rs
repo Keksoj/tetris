@@ -19,6 +19,7 @@ pub struct Game<R, W: Write> {
     pile: [Cell; 210],
     // the board is where the pile AND the moving tetrominoes are displayed
     board: [Cell; 210],
+    score: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +33,7 @@ pub struct Tetromino {
 impl<R: Read, W: Write> Game<R, W> {
     // Set a new empty game
     pub fn new(stdin: R, stdout: W) -> Game<R, RawTerminal<W>> {
-        let new_game = Game {
+        Game {
             stdout: stdout.into_raw_mode().unwrap(),
             stdin: stdin,
             speed: 700,
@@ -44,33 +45,38 @@ impl<R: Read, W: Write> Game<R, W> {
             },
             pile: [Cell::Empty; 210],
             board: [Cell::Empty; 210], // fill the board with zeroes
-        };
-        new_game
+            score: 0,
+        }
     }
 
     pub fn run(&mut self) {
         loop {
-            let mv = self.take_directions();
-            self.move_or_not(mv);
+            self.take_directions();
+            self.take_directions();
+            self.take_directions();
+            self.take_directions();
+            self.take_directions();
 
             self.display_the_board();
-            self.tick();
             self.clear_full_rows();
             self.game_over();
             thread::sleep(time::Duration::from_millis(self.speed));
+            self.tick();
         }
     }
 
     fn clear_full_rows(&mut self) {
         for h in 0..17 {
-            let range = (h * 10)..((h *10) + 10);
+            let range = (h * 10)..((h * 10) + 10);
             if !self.pile[range].contains(&Cell::Empty) {
                 for i in (h * 10)..200 {
-                    self.pile[i] = self.pile[i +10]
+                    self.pile[i] = self.pile[i + 10]
                 }
                 for i in 200..210 {
                     self.pile[i] = Cell::Empty
                 }
+                self.score += 1;
+                self.speed -= 20;
             }
         }
     }
@@ -78,7 +84,7 @@ impl<R: Read, W: Write> Game<R, W> {
     fn game_over(&mut self) {
         for cell in 170..180 {
             if self.pile[cell as usize] != Cell::Empty {
-                panic!("game over")
+                panic!("game over at score {}", self.score)
             }
         }
     }
@@ -112,23 +118,20 @@ impl<R: Read, W: Write> Game<R, W> {
         }
     }
 
-    fn take_directions(&mut self) -> Move {
-        let mv: Move;
-
+    fn take_directions(&mut self) {
         // should be some nice error wrapping
         let mut b = [0];
         self.stdin.read(&mut b).unwrap();
         match b[0] {
-            b'i' => mv = Move::Turn,
-            b'j' => mv = Move::Left,
-            b'k' => mv = Move::Down,
-            b'l' => mv = Move::Right,
+            b'i' => self.move_or_not(Move::Turn),
+            b'j' => self.move_or_not(Move::Left),
+            b'k' => self.move_or_not(Move::Down),
+            b'l' => self.move_or_not(Move::Right),
             b'q' => panic!("c'est la panique !"),
-            _ => mv = Move::Nothing, // should be some nice error handling
+            _ => return, // should be some nice error handling
         }
         // I stil have to understand what this does.
         self.stdout.flush().unwrap();
-        mv
     }
 
     fn move_or_not(&mut self, mv: Move) {
@@ -148,30 +151,13 @@ impl<R: Read, W: Write> Game<R, W> {
         }
 
         let mut it_collides = false;
-        // move left / check for collisions with the left wall
-        if mv == Move::Left {
-            for i in 0..4 {
-                if (self.tetromino.blocks[i as usize] + 1) % 10 == 0 {
-                    it_collides = true;
-                }
-            }
-        }
-        // move right / check for collisions with the right wall
-        if mv == Move::Right {
-            for i in 0..4 {
-                if self.tetromino.blocks[i as usize] % 10 == 0 {
-                    it_collides = true;
-                }
-            }
-        }
-        // turn / check overlapping of the % 10 frontier
-        if mv == Move::Turn {
-            for i in 0..4 {
-                if self.tetromino.blocks[i as usize] % 10 == 0 {
-                    for i in 0..4 {
-                        if (self.tetromino.blocks[i as usize] + 1) % 10 == 0 {
-                            it_collides = true;
-                        }
+
+        // Check for collision with the wall (overlapping the % 10 frontier)
+        for i in 0..4 {
+            if self.tetromino.blocks[i as usize] % 10 == 0 {
+                for i in 0..4 {
+                    if (self.tetromino.blocks[i as usize] + 1) % 10 == 0 {
+                        it_collides = true;
                     }
                 }
             }
@@ -215,34 +201,47 @@ impl<R: Read, W: Write> Game<R, W> {
             self.stdout.write(b"|").unwrap();
             for &cell in line.iter() {
                 let symbol = match cell {
-                    Cell::Empty => b" ",
-                    Cell::T => b"T",
-                    Cell::I => b"I",
-                    Cell::S => b"S",
-                    Cell::Z => b"Z",
-                    Cell::O => b"O",
-                    Cell::L => b"L",
-                    Cell::J => b"J",
-                    _ => b"X",
+                    Cell::Empty => b"   ",
+                    Cell::T => b"TTT",
+                    Cell::I => b"III",
+                    Cell::S => b"SSS",
+                    Cell::Z => b"ZZZ",
+                    Cell::O => b"OOO",
+                    Cell::L => b"LLL",
+                    Cell::J => b"JJJ",
+                    _ => b"XXX",
+                };
+                self.stdout.write(symbol).unwrap();
+            }
+            self.stdout.write(b"|\n\r").unwrap();
+            self.stdout.write(b"|").unwrap();
+            for &cell in line.iter() {
+                let symbol = match cell {
+                    Cell::Empty => b"   ",
+                    Cell::T => b"TTT",
+                    Cell::I => b"III",
+                    Cell::S => b"SSS",
+                    Cell::Z => b"ZZZ",
+                    Cell::O => b"OOO",
+                    Cell::L => b"LLL",
+                    Cell::J => b"JJJ",
+                    _ => b"XXX",
                 };
                 self.stdout.write(symbol).unwrap();
             }
             self.stdout.write(b"|\n\r").unwrap();
         }
         // bottom wall
-        for _n in 0..12 {
+        for _n in 0..36 {
             self.stdout.write(b"-").unwrap();
         }
         self.stdout.flush().unwrap();
         // write!(self.stdout, "{}", cursor::Hide).unwrap();
     }
 
-
     fn randow_new_tetromino() -> Tetromino {
         let name: Cell = rand::random(); // where does this random() come from ?
-        let new_tetromino: Tetromino;
-
-        let new_tetromino = Tetromino {
+        Tetromino {
             blocks: match name {
                 Cell::I => [175, 185, 195, 205],
                 Cell::T => [174, 175, 176, 185],
@@ -254,11 +253,10 @@ impl<R: Read, W: Write> Game<R, W> {
                 Cell::Empty => panic!("problème de création aléatoire")
                 // "O" => create_o(),
             },
-            name: name,
+            name,
             orientation: Orientation::North,
             can_move_down: true,
-        };
-        new_tetromino
+        }
     }
 
     fn push_down(&mut self) {
@@ -290,7 +288,7 @@ impl<R: Read, W: Write> Game<R, W> {
             Cell::O => self.turn_o(),
             Cell::L => self.turn_l(),
             Cell::J => self.turn_j(),
-            Cell::Empty => panic!("if this panics we really have a problem")
+            Cell::Empty => panic!("if this panics we really have a problem"),
         }
     }
     fn turn_t(&mut self) {
