@@ -16,17 +16,16 @@ pub struct Game<R, W: Write> {
     speed: u64,
     tetromino: Tetromino,
     // the "pile" is where the non-moving tetrominoes are piled
-    pile: [u8; 210],
+    pile: [Cell; 210],
     // the board is where the pile AND the moving tetrominoes are displayed
-    board: [u8; 210],
+    board: [Cell; 210],
 }
 
 #[derive(Debug, Clone)]
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
-    pub name: Name,
+    pub name: Cell,
     pub orientation: Orientation,
-    pub footprint: u8,
     pub can_move_down: bool,
 }
 
@@ -39,47 +38,14 @@ impl<R: Read, W: Write> Game<R, W> {
             speed: 700,
             tetromino: Tetromino {
                 blocks: [174, 175, 176, 185],
-                name: Name::T,
+                name: Cell::T,
                 orientation: Orientation::North,
-                footprint: 1,
                 can_move_down: true,
             },
-            pile: [0; 210],
-            board: [0; 210], // fill the board with zeroes
+            pile: [Cell::Empty; 210],
+            board: [Cell::Empty; 210], // fill the board with zeroes
         };
         new_game
-    }
-
-    fn push_down(&mut self) {
-        for i in 0..4 {
-            self.tetromino.blocks[i] -= 10;
-        }
-    }
-    fn push_up(&mut self) {
-        for i in 0..4 {
-            self.tetromino.blocks[i] += 10;
-        }
-    }
-    fn push_left(&mut self) {
-        for i in 0..4 {
-            self.tetromino.blocks[i] -= 1
-        }
-    }
-    fn push_right(&mut self) {
-        for i in 0..4 {
-            self.tetromino.blocks[i] += 1;
-        }
-    }
-    fn turn(&mut self) {
-        match self.tetromino.name {
-            Name::T => self.turn_t(),
-            Name::I => self.turn_i(),
-            Name::S => self.turn_s(),
-            Name::Z => self.turn_z(),
-            Name::O => self.turn_o(),
-            Name::L => self.turn_l(),
-            Name::J => self.turn_j(),
-        }
     }
 
     pub fn run(&mut self) {
@@ -89,23 +55,29 @@ impl<R: Read, W: Write> Game<R, W> {
 
             self.display_the_board();
             self.tick();
-            self.clear_full_row();
+            self.clear_full_rows();
             self.game_over();
-            thread::sleep(time::Duration::from_millis(1000));
+            thread::sleep(time::Duration::from_millis(self.speed));
         }
     }
 
-    fn clear_full_row(&mut self) {
-        for line in self.pile.chunks(10) {
-            if !line.contains(&0) {
-                panic!("full row")
+    fn clear_full_rows(&mut self) {
+        for h in 0..17 {
+            let range = (h * 10)..((h *10) + 10);
+            if !self.pile[range].contains(&Cell::Empty) {
+                for i in (h * 10)..200 {
+                    self.pile[i] = self.pile[i +10]
+                }
+                for i in 200..210 {
+                    self.pile[i] = Cell::Empty
+                }
             }
         }
     }
 
     fn game_over(&mut self) {
         for cell in 170..180 {
-            if self.pile[cell as usize] != 0 {
+            if self.pile[cell as usize] != Cell::Empty {
                 panic!("game over")
             }
         }
@@ -122,7 +94,7 @@ impl<R: Read, W: Write> Game<R, W> {
         // check for downward collision with the pile
         if self.tetromino.can_move_down {
             for coordinate in self.tetromino.blocks.iter() {
-                if self.pile[*coordinate as usize - 10] != 0 {
+                if self.pile[*coordinate as usize - 10] != Cell::Empty {
                     self.tetromino.can_move_down = false;
                 }
             }
@@ -133,7 +105,7 @@ impl<R: Read, W: Write> Game<R, W> {
         } else {
             // this writes the tetromino footprint on the "pile"
             for i in self.tetromino.blocks.iter() {
-                self.pile[*i as usize] = self.tetromino.footprint;
+                self.pile[*i as usize] = self.tetromino.name;
             }
             // This calls the new tetromino
             self.tetromino = Self::randow_new_tetromino();
@@ -206,7 +178,7 @@ impl<R: Read, W: Write> Game<R, W> {
         }
         // check for collisions with the pile
         for coordinate in self.tetromino.blocks.iter() {
-            if self.pile[*coordinate as usize] != 0 {
+            if self.pile[*coordinate as usize] != Cell::Empty {
                 it_collides = true;
             }
         }
@@ -228,12 +200,12 @@ impl<R: Read, W: Write> Game<R, W> {
     }
 
     fn display_the_board(&mut self) {
-        // Draw the pile (this erases the previously appearing tetromino)
+        // Draw the pile on the board (this erases the previously appearing tetromino)
         self.board = self.pile;
 
-        // Draw the tetromino
+        // Draw the tetromino on the board
         for i in self.tetromino.blocks.iter() {
-            self.board[*i as usize] = self.tetromino.footprint;
+            self.board[*i as usize] = self.tetromino.name;
         }
 
         // Display the whole damn thing
@@ -243,14 +215,14 @@ impl<R: Read, W: Write> Game<R, W> {
             self.stdout.write(b"|").unwrap();
             for &cell in line.iter() {
                 let symbol = match cell {
-                    0 => b" ",
-                    1 => b"T",
-                    2 => b"I",
-                    3 => b"S",
-                    4 => b"Z",
-                    5 => b"O",
-                    6 => b"L",
-                    7 => b"J",
+                    Cell::Empty => b" ",
+                    Cell::T => b"T",
+                    Cell::I => b"I",
+                    Cell::S => b"S",
+                    Cell::Z => b"Z",
+                    Cell::O => b"O",
+                    Cell::L => b"L",
+                    Cell::J => b"J",
                     _ => b"X",
                 };
                 self.stdout.write(symbol).unwrap();
@@ -265,32 +237,60 @@ impl<R: Read, W: Write> Game<R, W> {
         // write!(self.stdout, "{}", cursor::Hide).unwrap();
     }
 
-    // Here come the Tetromino functions
+
     fn randow_new_tetromino() -> Tetromino {
-        let name: Name = rand::random(); // where does this random() come from ?
+        let name: Cell = rand::random(); // where does this random() come from ?
         let new_tetromino: Tetromino;
-        match name {
-            Name::I => new_tetromino = Self::create_i(),
-            Name::T => new_tetromino = Self::create_t(),
-            Name::S => new_tetromino = Self::create_s(),
-            Name::Z => new_tetromino = Self::create_z(),
-            Name::O => new_tetromino = Self::create_o(),
-            Name::L => new_tetromino = Self::create_l(),
-            Name::J => new_tetromino = Self::create_j(),
-            // "O" => create_o(),
-        }
+
+        let new_tetromino = Tetromino {
+            blocks: match name {
+                Cell::I => [175, 185, 195, 205],
+                Cell::T => [174, 175, 176, 185],
+                Cell::S => [174, 175, 185, 186],
+                Cell::Z => [175, 176, 184, 185],
+                Cell::O => [174, 175, 185, 184],
+                Cell::L => [184, 174, 194, 175],
+                Cell::J => [185, 175, 195, 174],
+                Cell::Empty => panic!("problème de création aléatoire")
+                // "O" => create_o(),
+            },
+            name: name,
+            orientation: Orientation::North,
+            can_move_down: true,
+        };
         new_tetromino
     }
 
-    // T, footprint 1
-    fn create_t() -> Tetromino {
-        Tetromino {
-            // second item won't mv
-            blocks: [174, 175, 176, 185],
-            name: Name::T,
-            orientation: Orientation::North,
-            footprint: 1,
-            can_move_down: true,
+    fn push_down(&mut self) {
+        for i in 0..4 {
+            self.tetromino.blocks[i] -= 10;
+        }
+    }
+    fn push_up(&mut self) {
+        for i in 0..4 {
+            self.tetromino.blocks[i] += 10;
+        }
+    }
+    fn push_left(&mut self) {
+        for i in 0..4 {
+            self.tetromino.blocks[i] -= 1
+        }
+    }
+    fn push_right(&mut self) {
+        for i in 0..4 {
+            self.tetromino.blocks[i] += 1;
+        }
+    }
+    fn turn(&mut self) {
+        match self.tetromino.name {
+            Cell::T => self.turn_t(),
+            Cell::I => self.turn_i(),
+            Cell::S => self.turn_s(),
+            Cell::Z => self.turn_z(),
+            Cell::O => self.turn_o(),
+            Cell::L => self.turn_l(),
+            Cell::J => self.turn_j(),
+            Cell::Empty => panic!("if this panics we really have a problem")
         }
     }
     fn turn_t(&mut self) {
@@ -315,17 +315,6 @@ impl<R: Read, W: Write> Game<R, W> {
             }
         }
     }
-
-    // I, footprint 2
-    fn create_i() -> Tetromino {
-        Tetromino {
-            blocks: [175, 185, 195, 205],
-            name: Name::I,
-            orientation: Orientation::North,
-            footprint: 2,
-            can_move_down: true,
-        }
-    }
     fn turn_i(&mut self) {
         // check for verticality
         if self.tetromino.blocks[0] == self.tetromino.blocks[1] - 10 {
@@ -336,18 +325,6 @@ impl<R: Read, W: Write> Game<R, W> {
             self.tetromino.blocks[0] -= 9;
             self.tetromino.blocks[2] += 9;
             self.tetromino.blocks[3] += 18;
-        }
-    }
-
-    // S, footprint 3
-    fn create_s() -> Tetromino {
-        Tetromino {
-            blocks: [174, 175, 185, 186],
-            // the third is the center of rotation
-            name: Name::S,
-            orientation: Orientation::North,
-            footprint: 3,
-            can_move_down: true,
         }
     }
 
@@ -363,18 +340,6 @@ impl<R: Read, W: Write> Game<R, W> {
             self.tetromino.orientation = Orientation::North
         }
     }
-
-    // Z, footprint 4
-    fn create_z() -> Tetromino {
-        Tetromino {
-            blocks: [175, 176, 184, 185],
-            // the last one is the center of rotation
-            name: Name::Z,
-            orientation: Orientation::North,
-            footprint: 4,
-            can_move_down: true,
-        }
-    }
     fn turn_z(&mut self) {
         if self.tetromino.orientation == Orientation::North {
             self.tetromino.blocks[1] += 20;
@@ -386,28 +351,8 @@ impl<R: Read, W: Write> Game<R, W> {
             self.tetromino.orientation = Orientation::North
         }
     }
-    // O, footprint 5
-    fn create_o() -> Tetromino {
-        Tetromino {
-            blocks: [174, 175, 185, 184],
-            name: Name::O,
-            orientation: Orientation::North,
-            footprint: 5,
-            can_move_down: true,
-        }
-    }
     fn turn_o(&mut self) {
         return;
-    }
-    // L, footprint 6
-    fn create_l() -> Tetromino {
-        Tetromino {
-            blocks: [184, 174, 194, 175],
-            name: Name::L,
-            orientation: Orientation::North,
-            footprint: 6,
-            can_move_down: true,
-        }
     }
     fn turn_l(&mut self) {
         if self.tetromino.orientation == Orientation::North {
@@ -430,16 +375,6 @@ impl<R: Read, W: Write> Game<R, W> {
             self.tetromino.blocks[2] += 11;
             self.tetromino.blocks[3] -= 20;
             self.tetromino.orientation = Orientation::North;
-        }
-    }
-    // J, footprint 7
-    fn create_j() -> Tetromino {
-        Tetromino {
-            blocks: [185, 175, 195, 174],
-            name: Name::J,
-            orientation: Orientation::North,
-            footprint: 6,
-            can_move_down: true,
         }
     }
     fn turn_j(&mut self) {
@@ -476,7 +411,7 @@ enum Move {
     Nothing,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum Orientation {
     North,
     South,
@@ -484,8 +419,8 @@ pub enum Orientation {
     East,
 }
 
-#[derive(Debug, Clone)]
-pub enum Name {
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Cell {
     // Here are the footprints:
     T, // 1
     I, // 2
@@ -494,20 +429,21 @@ pub enum Name {
     O, // 5
     L, // 6
     J, // 7
+    Empty,
 }
 
 // Some whirly-dirly randomization stuff around chosing the next tetromino
-impl Distribution<Name> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Name {
+impl Distribution<Cell> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Cell {
         match rng.gen_range(0, 7) {
-            0 => Name::T,
-            1 => Name::I,
-            2 => Name::S,
-            3 => Name::Z,
-            4 => Name::O,
-            5 => Name::L,
-            6 => Name::J,
-            _ => Name::T,
+            0 => Cell::T,
+            1 => Cell::I,
+            2 => Cell::S,
+            3 => Cell::Z,
+            4 => Cell::O,
+            5 => Cell::L,
+            6 => Cell::J,
+            _ => Cell::T,
         }
     }
 }
