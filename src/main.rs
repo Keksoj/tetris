@@ -5,7 +5,6 @@ mod utils;
 
 use utils::Game;
 
-use std::io::stdin;
 use std::io::stdout;
 use termion::async_stdin;
 

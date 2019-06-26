@@ -22,12 +22,17 @@ pub struct Game<R, W: Write> {
     score: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy)]
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
     pub name: Cell,
     pub orientation: Orientation,
-    pub can_move_down: bool,
+}
+
+impl Clone for Tetromino {
+    fn clone(&self) -> Tetromino {
+        *self
+    }
 }
 
 impl<R: Read, W: Write> Game<R, W> {
@@ -36,12 +41,11 @@ impl<R: Read, W: Write> Game<R, W> {
         Game {
             stdout: stdout.into_raw_mode().unwrap(),
             stdin: stdin,
-            speed: 700,
+            speed: 500,
             tetromino: Tetromino {
                 blocks: [174, 175, 176, 185],
                 name: Cell::T,
                 orientation: Orientation::North,
-                can_move_down: true,
             },
             pile: [Cell::Empty; 210],
             board: [Cell::Empty; 210], // fill the board with zeroes
@@ -51,10 +55,6 @@ impl<R: Read, W: Write> Game<R, W> {
 
     pub fn run(&mut self) {
         loop {
-            self.take_directions();
-            self.take_directions();
-            self.take_directions();
-            self.take_directions();
             self.take_directions();
 
             self.display_the_board();
@@ -66,123 +66,131 @@ impl<R: Read, W: Write> Game<R, W> {
     }
 
     fn clear_full_rows(&mut self) {
+        // Check all rows, as ranges
         for h in 0..17 {
-            let range = (h * 10)..((h * 10) + 10);
-            if !self.pile[range].contains(&Cell::Empty) {
+            let row = (h * 10)..((h * 10) + 10);
+
+            // If it contains no empty cell, replace it by its upstair neighbor
+            // and recursively to the top. Set a new empty row at the top
+            if !self.pile[row].contains(&Cell::Empty) {
                 for i in (h * 10)..200 {
                     self.pile[i] = self.pile[i + 10]
                 }
                 for i in 200..210 {
                     self.pile[i] = Cell::Empty
                 }
+                // increase score and difficulty
                 self.score += 1;
                 self.speed -= 20;
             }
         }
     }
 
+    // If the pile reaches up to the middle of the 17th row => game over
     fn game_over(&mut self) {
-        for cell in 170..180 {
+        for cell in 173..177 {
             if self.pile[cell as usize] != Cell::Empty {
                 panic!("game over at score {}", self.score)
             }
         }
     }
 
+    // tick the tetromino downward. If the move is not possible, freeze it and
+    // call a new one
     fn tick(&mut self) {
-        // check for bottom collision
-        for i in 0..4 {
-            if self.tetromino.blocks[i as usize] < 10 {
-                self.tetromino.can_move_down = false;
-            }
-        }
-
-        // check for downward collision with the pile
-        if self.tetromino.can_move_down {
-            for coordinate in self.tetromino.blocks.iter() {
-                if self.pile[*coordinate as usize - 10] != Cell::Empty {
-                    self.tetromino.can_move_down = false;
-                }
-            }
-        }
-
-        if self.tetromino.can_move_down {
-            self.move_or_not(Move::Down);
+        let coordinates = self.get_new_coordinates(Move::Down);
+        let it_can_move = self.check_for_collisions(coordinates, Move::Down);
+        if it_can_move {
+            self.settle_the_move(coordinates);
         } else {
-            // this writes the tetromino footprint on the "pile"
-            for i in self.tetromino.blocks.iter() {
-                self.pile[*i as usize] = self.tetromino.name;
+            // freeze the tetromino on the pile
+            for coordinate in self.tetromino.blocks.iter() {
+                self.pile[*coordinate as usize] = self.tetromino.name;
             }
-            // This calls the new tetromino
+            // call a new tetromino
             self.tetromino = Self::randow_new_tetromino();
         }
+        self.display_the_board();
     }
 
     fn take_directions(&mut self) {
         // should be some nice error wrapping
         let mut b = [0];
+        let mut mv: Move;
         self.stdin.read(&mut b).unwrap();
         match b[0] {
-            b'i' => self.move_or_not(Move::Turn),
-            b'j' => self.move_or_not(Move::Left),
-            b'k' => self.move_or_not(Move::Down),
-            b'l' => self.move_or_not(Move::Right),
+            b'i' => mv = Move::Turn,
+            b'j' => mv = Move::Left,
+            b'k' => mv = Move::Down,
+            b'l' => mv = Move::Right,
             b'q' => panic!("c'est la panique !"),
             _ => return, // should be some nice error handling
         }
-        // I stil have to understand what this does.
+
+        let coordinates = self.get_new_coordinates(mv.clone());
+        let it_can_move = self.check_for_collisions(coordinates, mv);
+        if it_can_move {
+            self.settle_the_move(coordinates);
+        } else {
+            return;
+        }
         self.stdout.flush().unwrap();
     }
 
-    fn move_or_not(&mut self, mv: Move) {
-        // First, check for bottom collision, or we'll have subtract with overflow
-        for i in 0..4 {
-            if mv == Move::Down && self.tetromino.blocks[i as usize] < 10 {
-                return;
-            }
-        }
-        // Performs the move
+    // warning: the turn() function here will change the orientation field of the
+    // Tetromino struct. If the move doesn't occur, the check_for_collision()
+    // function will reset the orientation
+    fn get_new_coordinates(&mut self, mv: Move) -> [u8; 4] {
+        let mut coordinates: [u8; 4];
         match mv {
-            Move::Left => self.push_left(),
-            Move::Right => self.push_right(),
-            Move::Down => self.push_down(),
-            Move::Turn => self.turn(),
-            Move::Nothing => return,
+            Move::Left => coordinates = self.push_left(),
+            Move::Right => coordinates = self.push_right(),
+            Move::Down => coordinates = self.push_down(),
+            Move::Turn => coordinates = self.turn(),
         }
+        coordinates
+    }
 
-        let mut it_collides = false;
-
+    fn check_for_collisions(&mut self, coordinates: [u8; 4], mv: Move) -> bool {
+        let mut no_collision = true;
         // Check for collision with the wall (overlapping the % 10 frontier)
-        for i in 0..4 {
-            if self.tetromino.blocks[i as usize] % 10 == 0 {
-                for i in 0..4 {
-                    if (self.tetromino.blocks[i as usize] + 1) % 10 == 0 {
-                        it_collides = true;
+        for i in coordinates.iter() {
+            if i % 10 == 0 {
+                for i in coordinates.iter() {
+                    if (i + 1) % 10 == 0 {
+                        no_collision = false;
                     }
                 }
             }
         }
         // check for collisions with the pile
-        for coordinate in self.tetromino.blocks.iter() {
-            if self.pile[*coordinate as usize] != Cell::Empty {
-                it_collides = true;
+        for i in coordinates.iter() {
+            if self.pile[*i as usize] != Cell::Empty {
+                no_collision = false;
             }
         }
-        // undoes the mv in case of a collision
-        if it_collides {
-            match mv {
-                Move::Left => self.push_right(),
-                Move::Right => self.push_left(),
-                Move::Down => self.push_up(),
-                Move::Turn => {
-                    self.turn();
-                    self.turn();
-                    self.turn();
-                }
-                Move::Nothing => return,
+        // check for collision with the bottom
+        for i in coordinates.iter() {
+            if i < &10 {
+                no_collision = false;
             }
         }
-        self.display_the_board();
+        // in case of a collision, set the tetromino's orientation back to what it was
+        if !no_collision && mv == Move::Turn {
+            match self.tetromino.orientation {
+                Orientation::North => self.tetromino.orientation = Orientation::West,
+                Orientation::East => self.tetromino.orientation = Orientation::North,
+                Orientation::South => self.tetromino.orientation = Orientation::East,
+                Orientation::West => self.tetromino.orientation = Orientation::South,
+            }
+        }
+        // Return the boolean
+        no_collision
+    }
+
+    // This set the new position of the tetromino
+    fn settle_the_move(&mut self, coordinates: [u8; 4]) {
+        self.tetromino.blocks = coordinates;
     }
 
     fn display_the_board(&mut self) {
@@ -196,43 +204,28 @@ impl<R: Read, W: Write> Game<R, W> {
 
         // Display the whole damn thing
         write!(self.stdout, "{}{}", clear::All, cursor::Goto(1, 1)).unwrap();
-
-        for line in self.board.chunks(10).rev() {
-            self.stdout.write(b"|").unwrap();
-            for &cell in line.iter() {
-                let symbol = match cell {
-                    Cell::Empty => b"   ",
-                    Cell::T => b"TTT",
-                    Cell::I => b"III",
-                    Cell::S => b"SSS",
-                    Cell::Z => b"ZZZ",
-                    Cell::O => b"OOO",
-                    Cell::L => b"LLL",
-                    Cell::J => b"JJJ",
-                    _ => b"XXX",
-                };
-                self.stdout.write(symbol).unwrap();
+            for line in self.board.chunks(10).rev() {
+                for _i in 0..2 {
+                self.stdout.write(b"|").unwrap();
+                for &cell in line.iter() {
+                    let symbol = match cell {
+                        Cell::Empty => b"   ",
+                        Cell::T => b"TTT",
+                        Cell::I => b"III",
+                        Cell::S => b"SSS",
+                        Cell::Z => b"ZZZ",
+                        Cell::O => b"OOO",
+                        Cell::L => b"LLL",
+                        Cell::J => b"JJJ",
+                        _ => b"XXX",
+                    };
+                    self.stdout.write(symbol).unwrap();
+                }
+                self.stdout.write(b"|\n\r").unwrap();
             }
-            self.stdout.write(b"|\n\r").unwrap();
-            self.stdout.write(b"|").unwrap();
-            for &cell in line.iter() {
-                let symbol = match cell {
-                    Cell::Empty => b"   ",
-                    Cell::T => b"TTT",
-                    Cell::I => b"III",
-                    Cell::S => b"SSS",
-                    Cell::Z => b"ZZZ",
-                    Cell::O => b"OOO",
-                    Cell::L => b"LLL",
-                    Cell::J => b"JJJ",
-                    _ => b"XXX",
-                };
-                self.stdout.write(symbol).unwrap();
-            }
-            self.stdout.write(b"|\n\r").unwrap();
         }
         // bottom wall
-        for _n in 0..36 {
+        for _n in 0..32 {
             self.stdout.write(b"-").unwrap();
         }
         self.stdout.flush().unwrap();
@@ -250,163 +243,153 @@ impl<R: Read, W: Write> Game<R, W> {
                 Cell::O => [174, 175, 185, 184],
                 Cell::L => [184, 174, 194, 175],
                 Cell::J => [185, 175, 195, 174],
-                Cell::Empty => panic!("problème de création aléatoire")
-                // "O" => create_o(),
+                Cell::Empty => panic!("problème de création aléatoire"),
             },
             name,
             orientation: Orientation::North,
-            can_move_down: true,
         }
     }
 
-    fn push_down(&mut self) {
+    // The push functions provide the tetromino's new position in case of a move
+    // Those coordinates will be tested for possible collisions
+    fn push_down(&self) -> [u8; 4] {
+        let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
         for i in 0..4 {
-            self.tetromino.blocks[i] -= 10;
+            coordinates[i as usize] -= 10;
         }
+        coordinates
     }
-    fn push_up(&mut self) {
+    fn push_left(&self) -> [u8; 4] {
+        let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
         for i in 0..4 {
-            self.tetromino.blocks[i] += 10;
+            coordinates[i as usize] -= 1;
         }
+        coordinates
     }
-    fn push_left(&mut self) {
+    fn push_right(&self) -> [u8; 4] {
+        let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
         for i in 0..4 {
-            self.tetromino.blocks[i] -= 1
+            coordinates[i as usize] += 1;
         }
+        coordinates
     }
-    fn push_right(&mut self) {
-        for i in 0..4 {
-            self.tetromino.blocks[i] += 1;
-        }
-    }
-    fn turn(&mut self) {
+    fn turn(&mut self) -> [u8; 4] {
+        let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
+
         match self.tetromino.name {
-            Cell::T => self.turn_t(),
-            Cell::I => self.turn_i(),
-            Cell::S => self.turn_s(),
-            Cell::Z => self.turn_z(),
-            Cell::O => self.turn_o(),
-            Cell::L => self.turn_l(),
-            Cell::J => self.turn_j(),
+            Cell::T => match self.tetromino.orientation {
+                Orientation::North => {
+                    coordinates[0] -= 9;
+                    self.tetromino.orientation = Orientation::East
+                }
+                Orientation::East => {
+                    coordinates[3] -= 11;
+                    self.tetromino.orientation = Orientation::South
+                }
+                Orientation::South => {
+                    coordinates[2] += 9;
+                    self.tetromino.orientation = Orientation::West
+                }
+                Orientation::West => {
+                    coordinates[0] += 9;
+                    coordinates[3] += 11;
+                    coordinates[2] -= 9;
+                    self.tetromino.orientation = Orientation::North
+                }
+            },
+            Cell::I => {
+                if coordinates[0] == coordinates[1] - 10 {
+                    coordinates[0] += 9;
+                    coordinates[2] -= 9;
+                    coordinates[3] -= 18;
+                } else {
+                    coordinates[0] -= 9;
+                    coordinates[2] += 9;
+                    coordinates[3] += 18;
+                }
+            }
+            Cell::S => {
+                if self.tetromino.orientation == Orientation::North {
+                    coordinates[0] += 21;
+                    coordinates[1] += 1;
+                    self.tetromino.orientation = Orientation::East
+                } else {
+                    coordinates[0] -= 21;
+                    coordinates[1] -= 1;
+                    self.tetromino.orientation = Orientation::North
+                }
+            }
+            Cell::Z => {
+                if self.tetromino.orientation == Orientation::North {
+                    coordinates[1] += 20;
+                    coordinates[2] += 2;
+                    self.tetromino.orientation = Orientation::East
+                } else {
+                    coordinates[1] -= 20;
+                    coordinates[2] -= 2;
+                    self.tetromino.orientation = Orientation::North
+                }
+            }
+            Cell::O => return coordinates,
+            Cell::L => {
+                if self.tetromino.orientation == Orientation::North {
+                    coordinates[1] += 11;
+                    coordinates[2] -= 11;
+                    coordinates[3] -= 2;
+                    self.tetromino.orientation = Orientation::East
+                } else if self.tetromino.orientation == Orientation::East {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] += 20;
+                    self.tetromino.orientation = Orientation::South
+                } else if self.tetromino.orientation == Orientation::South {
+                    coordinates[1] += 11;
+                    coordinates[2] -= 11;
+                    coordinates[3] += 2;
+                    self.tetromino.orientation = Orientation::West
+                } else if self.tetromino.orientation == Orientation::West {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] -= 20;
+                    self.tetromino.orientation = Orientation::North;
+                }
+            }
+            Cell::J => {
+                if self.tetromino.orientation == Orientation::North {
+                    coordinates[1] += 11;
+                    coordinates[2] -= 11;
+                    coordinates[3] += 20;
+                    self.tetromino.orientation = Orientation::East
+                } else if self.tetromino.orientation == Orientation::East {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] += 2;
+                    self.tetromino.orientation = Orientation::South
+                } else if self.tetromino.orientation == Orientation::South {
+                    coordinates[1] += 11;
+                    coordinates[2] -= 11;
+                    coordinates[3] -= 20;
+                    self.tetromino.orientation = Orientation::West
+                } else if self.tetromino.orientation == Orientation::West {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] -= 2;
+                    self.tetromino.orientation = Orientation::North;
+                }
+            }
             Cell::Empty => panic!("if this panics we really have a problem"),
         }
-    }
-    fn turn_t(&mut self) {
-        match self.tetromino.orientation {
-            Orientation::North => {
-                self.tetromino.blocks[0] -= 9;
-                self.tetromino.orientation = Orientation::East
-            }
-            Orientation::East => {
-                self.tetromino.blocks[3] -= 11;
-                self.tetromino.orientation = Orientation::South
-            }
-            Orientation::South => {
-                self.tetromino.blocks[2] += 9;
-                self.tetromino.orientation = Orientation::West
-            }
-            Orientation::West => {
-                self.tetromino.blocks[0] += 9;
-                self.tetromino.blocks[3] += 11;
-                self.tetromino.blocks[2] -= 9;
-                self.tetromino.orientation = Orientation::North
-            }
-        }
-    }
-    fn turn_i(&mut self) {
-        // check for verticality
-        if self.tetromino.blocks[0] == self.tetromino.blocks[1] - 10 {
-            self.tetromino.blocks[0] += 9;
-            self.tetromino.blocks[2] -= 9;
-            self.tetromino.blocks[3] -= 18;
-        } else {
-            self.tetromino.blocks[0] -= 9;
-            self.tetromino.blocks[2] += 9;
-            self.tetromino.blocks[3] += 18;
-        }
-    }
-
-    pub fn turn_s(&mut self) {
-        // check for collisions
-        if self.tetromino.orientation == Orientation::North {
-            self.tetromino.blocks[0] += 21;
-            self.tetromino.blocks[1] += 1;
-            self.tetromino.orientation = Orientation::East
-        } else {
-            self.tetromino.blocks[0] -= 21;
-            self.tetromino.blocks[1] -= 1;
-            self.tetromino.orientation = Orientation::North
-        }
-    }
-    fn turn_z(&mut self) {
-        if self.tetromino.orientation == Orientation::North {
-            self.tetromino.blocks[1] += 20;
-            self.tetromino.blocks[2] += 2;
-            self.tetromino.orientation = Orientation::East
-        } else {
-            self.tetromino.blocks[1] -= 20;
-            self.tetromino.blocks[2] -= 2;
-            self.tetromino.orientation = Orientation::North
-        }
-    }
-    fn turn_o(&mut self) {
-        return;
-    }
-    fn turn_l(&mut self) {
-        if self.tetromino.orientation == Orientation::North {
-            self.tetromino.blocks[1] += 11;
-            self.tetromino.blocks[2] -= 11;
-            self.tetromino.blocks[3] -= 2;
-            self.tetromino.orientation = Orientation::East
-        } else if self.tetromino.orientation == Orientation::East {
-            self.tetromino.blocks[1] -= 11;
-            self.tetromino.blocks[2] += 11;
-            self.tetromino.blocks[3] += 20;
-            self.tetromino.orientation = Orientation::South
-        } else if self.tetromino.orientation == Orientation::South {
-            self.tetromino.blocks[1] += 11;
-            self.tetromino.blocks[2] -= 11;
-            self.tetromino.blocks[3] += 2;
-            self.tetromino.orientation = Orientation::West
-        } else if self.tetromino.orientation == Orientation::West {
-            self.tetromino.blocks[1] -= 11;
-            self.tetromino.blocks[2] += 11;
-            self.tetromino.blocks[3] -= 20;
-            self.tetromino.orientation = Orientation::North;
-        }
-    }
-    fn turn_j(&mut self) {
-        if self.tetromino.orientation == Orientation::North {
-            self.tetromino.blocks[1] += 11;
-            self.tetromino.blocks[2] -= 11;
-            self.tetromino.blocks[3] += 20;
-            self.tetromino.orientation = Orientation::East
-        } else if self.tetromino.orientation == Orientation::East {
-            self.tetromino.blocks[1] -= 11;
-            self.tetromino.blocks[2] += 11;
-            self.tetromino.blocks[3] += 2;
-            self.tetromino.orientation = Orientation::South
-        } else if self.tetromino.orientation == Orientation::South {
-            self.tetromino.blocks[1] += 11;
-            self.tetromino.blocks[2] -= 11;
-            self.tetromino.blocks[3] -= 20;
-            self.tetromino.orientation = Orientation::West
-        } else if self.tetromino.orientation == Orientation::West {
-            self.tetromino.blocks[1] -= 11;
-            self.tetromino.blocks[2] += 11;
-            self.tetromino.blocks[3] -= 2;
-            self.tetromino.orientation = Orientation::North;
-        }
+        coordinates
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Move {
     Left,
     Right,
     Down,
     Turn,
-    Nothing,
+    // Nothing,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
