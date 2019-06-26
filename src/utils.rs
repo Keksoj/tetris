@@ -9,7 +9,6 @@ use termion::raw::IntoRawMode;
 use termion::raw::RawTerminal;
 use termion::{clear, cursor};
 
-// #[derive(Debug)]
 pub struct Game<R, W: Write> {
     stdout: W,
     stdin: R,
@@ -26,7 +25,7 @@ pub struct Game<R, W: Write> {
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
     pub name: Cell,
-    pub spin: u8, // keeps track of the number of turns
+    pub spin: u8, // keeps track of the number of turnsg
 }
 
 impl Clone for Tetromino {
@@ -55,11 +54,11 @@ impl<R: Read, W: Write> Game<R, W> {
 
     pub fn run(&mut self) {
         loop {
-            self.take_directions();
+            self.take_directions(); // moves
 
             self.display_the_board();
-            self.clear_full_rows();
-            self.game_over();
+            self.clear_full_rows(); //
+            self.game_over(); // checks if game is over
             thread::sleep(time::Duration::from_millis(self.speed));
             self.tick();
         }
@@ -137,15 +136,15 @@ impl<R: Read, W: Write> Game<R, W> {
         self.stdout.flush().unwrap();
     }
 
-    // warning: the turn() function here will change the spin field of the
-    // Tetromino struct. If the move doesn't occur, the check_for_collision()
-    // function will reset the spin
     fn get_new_coordinates(&mut self, mv: Move) -> [u8; 4] {
         let mut coordinates: [u8; 4];
         match mv {
             Move::Left => coordinates = self.push_left(),
             Move::Right => coordinates = self.push_right(),
             Move::Down => coordinates = self.push_down(),
+            // warning: the turn() function here will change the spin field of the
+            // Tetromino struct. If the move doesn't occur, the check_for_collision()
+            // function will reset the spin
             Move::Turn => coordinates = self.turn(),
         }
         coordinates
@@ -175,7 +174,7 @@ impl<R: Read, W: Write> Game<R, W> {
                 no_collision = false;
             }
         }
-        // in case of a collision, set the tetromino's spin back to what it was
+        // in case of a turn collision, set the tetromino's spin back to what it was
         if !no_collision && mv == Move::Turn {
             self.tetromino.spin -= 1;
         }
@@ -224,7 +223,6 @@ impl<R: Read, W: Write> Game<R, W> {
             self.stdout.write(b"-").unwrap();
         }
         self.stdout.flush().unwrap();
-        // write!(self.stdout, "{}", cursor::Hide).unwrap();
     }
 
     fn randow_new_tetromino() -> Tetromino {
@@ -390,7 +388,6 @@ enum Move {
     Right,
     Down,
     Turn,
-    // Nothing,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -405,7 +402,7 @@ pub enum Cell {
     Empty,
 }
 
-// Some whirly-dirly randomization stuff around chosing the next tetromino
+// randomization stuff around chosing the next tetromino
 impl Distribution<Cell> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Cell {
         match rng.gen_range(0, 7) {

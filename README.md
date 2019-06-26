@@ -63,4 +63,4 @@ struct Tetromino {
 
 The gods of mathematics are with us, we can move a Tetromino one row down by doing `-= 10` on all its coordinate. `+= 1` to push it to the right, and so on.
 
-The whole code has been refactored on and on. Get the game working isn't the goal anymore, it's to learn the community standards of a code that is clean and easily understandable.
+The whole code has been refactored on and on, and will be, again and again. Getting the game working is done, the goal now is to learn the community standards of a code that is clean and easily understandable.
