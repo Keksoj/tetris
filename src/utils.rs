@@ -26,7 +26,7 @@ pub struct Game<R, W: Write> {
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
     pub name: Cell,
-    pub spin: u8,
+    pub spin: u8, // keeps track of the number of turns
 }
 
 impl Clone for Tetromino {
@@ -271,125 +271,114 @@ impl<R: Read, W: Write> Game<R, W> {
     fn turn(&mut self) -> [u8; 4] {
         let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
 
-        match self.tetromino.name {
-            Cell::T => match self.tetromino.spin {
-                0 => {
-                    coordinates[0] -= 9;
-                    self.tetromino.spin += 1
+        match self.tetromino.spin {
+            0 => {
+                match self.tetromino.name {
+                    Cell::T => coordinates[0] -= 9,
+                    Cell::L => {
+                        coordinates[1] += 11;
+                        coordinates[2] -= 11;
+                        coordinates[3] -= 2;
+                    }
+                    Cell::J => {
+                        coordinates[1] += 11;
+                        coordinates[2] -= 11;
+                        coordinates[3] += 20;
+                    }
+                    Cell::I => {
+                        coordinates[0] += 9;
+                        coordinates[2] -= 9;
+                        coordinates[3] -= 18;
+                    }
+                    Cell::S => {
+                        coordinates[0] += 21;
+                        coordinates[1] += 1;
+                    }
+                    Cell::Z => {
+                        coordinates[1] += 20;
+                        coordinates[2] += 2;
+                    }
+                    Cell::O => return coordinates,
+                    _ => return coordinates,
                 }
-                1 => {
-                    coordinates[3] -= 11;
-                    self.tetromino.spin += 1
+                self.tetromino.spin += 1;
+            }
+            1 => {
+                match self.tetromino.name {
+                    Cell::T => {
+                        coordinates[3] -= 11;
+                        self.tetromino.spin += 1;
+                    }
+                    Cell::L => {
+                        coordinates[1] -= 11;
+                        coordinates[2] += 11;
+                        coordinates[3] += 20;
+                        self.tetromino.spin += 1;
+                    }
+                    Cell::J => {
+                        coordinates[1] -= 11;
+                        coordinates[2] += 11;
+                        coordinates[3] += 2;
+                        self.tetromino.spin += 1;
+                    }
+                    Cell::I => {
+                        coordinates[0] -= 9;
+                        coordinates[2] += 9;
+                        coordinates[3] += 18;
+                        self.tetromino.spin += 1;
+                    }
+                    Cell::S => {
+                        coordinates[0] -= 21;
+                        coordinates[1] -= 1;
+                        self.tetromino.spin -= 1;
+                    }
+                    Cell::Z => {
+                        coordinates[1] -= 20;
+                        coordinates[2] -= 2;
+                        self.tetromino.spin -= 1;
+                    }
+                    _ => return coordinates,
                 }
-                2 => {
-                    coordinates[2] += 9;
-                    self.tetromino.spin += 1
-                }
-                3 => {
-                    coordinates[0] += 9;
-                    coordinates[3] += 11;
-                    coordinates[2] -= 9;
-                    self.tetromino.spin -= 3;
-                }
-                _ => return coordinates,
-            },
-            Cell::I => match self.tetromino.spin {
-                0 => {
-                    coordinates[0] += 9;
-                    coordinates[2] -= 9;
-                    coordinates[3] -= 18;
-                    self.tetromino.spin += 1;
-                }
-                1 => {
-                    coordinates[0] -= 9;
-                    coordinates[2] += 9;
-                    coordinates[3] += 18;
-                    self.tetromino.spin -= 1;
-                }
-                _ => return coordinates,
-            },
-            Cell::S => match self.tetromino.spin {
-                0 => {
-                    coordinates[0] += 21;
-                    coordinates[1] += 1;
-                    self.tetromino.spin += 1;
-                }
-                1 => {
-                    coordinates[0] -= 21;
-                    coordinates[1] -= 1;
-                    self.tetromino.spin -= 1;
-                }
-                _ => return coordinates,
-            },
-            Cell::Z => match self.tetromino.spin {
-                0 => {
-                    coordinates[1] += 20;
-                    coordinates[2] += 2;
-                    self.tetromino.spin += 1;
-                }
-                1 => {
-                    coordinates[1] -= 20;
-                    coordinates[2] -= 2;
-                    self.tetromino.spin -= 1;
-                }
-                _ => return coordinates,
-            },
-            Cell::O => return coordinates,
-            Cell::L => match self.tetromino.spin {
-                0 => {
-                    coordinates[1] += 11;
-                    coordinates[2] -= 11;
-                    coordinates[3] -= 2;
-                    self.tetromino.spin += 1;
-                }
-                1 => {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] += 20;
-                    self.tetromino.spin += 1;
-                }
-                2 => {
-                    coordinates[1] += 11;
-                    coordinates[2] -= 11;
-                    coordinates[3] += 2;
-                    self.tetromino.spin += 1;
-                }
-                3 => {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] -= 20;
-                    self.tetromino.spin -= 3;
-                }
-                _ => return coordinates,
-            },
-            Cell::J => match self.tetromino.spin {
-                0 => {
-                    coordinates[1] += 11;
-                    coordinates[2] -= 11;
-                    coordinates[3] += 20;
-                    self.tetromino.spin += 1;
-                }
-                1 => {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] += 2;
-                    self.tetromino.spin += 1;
-                }
-                2 => {
-                    coordinates[1] += 11;
-                    coordinates[2] -= 11;
-                    coordinates[3] -= 20;
-                    self.tetromino.spin += 1;
-                }
-                3 => {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] -= 2;
-                    self.tetromino.spin -= 3;
-                }
-                _ => return coordinates,
-            },
-            Cell::Empty => panic!("if this panics we really have a problem"),
+            }
+            2 => {
+                match self.tetromino.name {
+                    Cell::T => coordinates[2] += 9,
+                    Cell::L => {
+                        coordinates[1] += 11;
+                        coordinates[2] -= 11;
+                        coordinates[3] += 2;
+                    }
+                    Cell::J => {
+                        coordinates[1] += 11;
+                        coordinates[2] -= 11;
+                        coordinates[3] -= 20;
+                    }
+                    _ => return coordinates,
+                };
+                self.tetromino.spin += 1;
+            }
+            3 => {
+                match self.tetromino.name {
+                    Cell::T => {
+                        coordinates[0] += 9;
+                        coordinates[3] += 11;
+                        coordinates[2] -= 9;
+                    }
+                    Cell::L => {
+                        coordinates[1] -= 11;
+                        coordinates[2] += 11;
+                        coordinates[3] -= 20;
+                    }
+                    Cell::J => {
+                        coordinates[1] -= 11;
+                        coordinates[2] += 11;
+                        coordinates[3] -= 2;
+                    }
+                    _ => return coordinates,
+                };
+                self.tetromino.spin -= 3;
+            }
+            _ => return coordinates,
         }
         coordinates
     }
@@ -406,14 +395,13 @@ enum Move {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Cell {
-    // Here are the footprints:
-    T, // 1
-    I, // 2
-    S, // 3
-    Z, // 4
-    O, // 5
-    L, // 6
-    J, // 7
+    T,
+    I,
+    S,
+    Z,
+    O,
+    L,
+    J,
     Empty,
 }
 
