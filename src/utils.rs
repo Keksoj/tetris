@@ -26,7 +26,7 @@ pub struct Game<R, W: Write> {
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
     pub name: Cell,
-    pub orientation: Orientation,
+    pub spin: u8,
 }
 
 impl Clone for Tetromino {
@@ -45,7 +45,7 @@ impl<R: Read, W: Write> Game<R, W> {
             tetromino: Tetromino {
                 blocks: [174, 175, 176, 185],
                 name: Cell::T,
-                orientation: Orientation::North,
+                spin: 0,
             },
             pile: [Cell::Empty; 210],
             board: [Cell::Empty; 210], // fill the board with zeroes
@@ -137,9 +137,9 @@ impl<R: Read, W: Write> Game<R, W> {
         self.stdout.flush().unwrap();
     }
 
-    // warning: the turn() function here will change the orientation field of the
+    // warning: the turn() function here will change the spin field of the
     // Tetromino struct. If the move doesn't occur, the check_for_collision()
-    // function will reset the orientation
+    // function will reset the spin
     fn get_new_coordinates(&mut self, mv: Move) -> [u8; 4] {
         let mut coordinates: [u8; 4];
         match mv {
@@ -175,14 +175,9 @@ impl<R: Read, W: Write> Game<R, W> {
                 no_collision = false;
             }
         }
-        // in case of a collision, set the tetromino's orientation back to what it was
+        // in case of a collision, set the tetromino's spin back to what it was
         if !no_collision && mv == Move::Turn {
-            match self.tetromino.orientation {
-                Orientation::North => self.tetromino.orientation = Orientation::West,
-                Orientation::East => self.tetromino.orientation = Orientation::North,
-                Orientation::South => self.tetromino.orientation = Orientation::East,
-                Orientation::West => self.tetromino.orientation = Orientation::South,
-            }
+            self.tetromino.spin -= 1;
         }
         // Return the boolean
         no_collision
@@ -204,8 +199,8 @@ impl<R: Read, W: Write> Game<R, W> {
 
         // Display the whole damn thing
         write!(self.stdout, "{}{}", clear::All, cursor::Goto(1, 1)).unwrap();
-            for line in self.board.chunks(10).rev() {
-                for _i in 0..2 {
+        for line in self.board.chunks(10).rev() {
+            for _i in 0..2 {
                 self.stdout.write(b"|").unwrap();
                 for &cell in line.iter() {
                     let symbol = match cell {
@@ -236,17 +231,17 @@ impl<R: Read, W: Write> Game<R, W> {
         let name: Cell = rand::random(); // where does this random() come from ?
         Tetromino {
             blocks: match name {
-                Cell::I => [175, 185, 195, 205],
                 Cell::T => [174, 175, 176, 185],
+                Cell::L => [184, 174, 194, 175],
+                Cell::J => [185, 175, 195, 174],
+                Cell::I => [175, 185, 195, 205],
                 Cell::S => [174, 175, 185, 186],
                 Cell::Z => [175, 176, 184, 185],
                 Cell::O => [174, 175, 185, 184],
-                Cell::L => [184, 174, 194, 175],
-                Cell::J => [185, 175, 195, 174],
                 Cell::Empty => panic!("problème de création aléatoire"),
             },
             name,
-            orientation: Orientation::North,
+            spin: 0,
         }
     }
 
@@ -277,106 +272,123 @@ impl<R: Read, W: Write> Game<R, W> {
         let mut coordinates: [u8; 4] = self.tetromino.blocks.clone();
 
         match self.tetromino.name {
-            Cell::T => match self.tetromino.orientation {
-                Orientation::North => {
+            Cell::T => match self.tetromino.spin {
+                0 => {
                     coordinates[0] -= 9;
-                    self.tetromino.orientation = Orientation::East
+                    self.tetromino.spin += 1
                 }
-                Orientation::East => {
+                1 => {
                     coordinates[3] -= 11;
-                    self.tetromino.orientation = Orientation::South
+                    self.tetromino.spin += 1
                 }
-                Orientation::South => {
+                2 => {
                     coordinates[2] += 9;
-                    self.tetromino.orientation = Orientation::West
+                    self.tetromino.spin += 1
                 }
-                Orientation::West => {
+                3 => {
                     coordinates[0] += 9;
                     coordinates[3] += 11;
                     coordinates[2] -= 9;
-                    self.tetromino.orientation = Orientation::North
+                    self.tetromino.spin -= 3;
                 }
+                _ => return coordinates,
             },
-            Cell::I => {
-                if coordinates[0] == coordinates[1] - 10 {
+            Cell::I => match self.tetromino.spin {
+                0 => {
                     coordinates[0] += 9;
                     coordinates[2] -= 9;
                     coordinates[3] -= 18;
-                } else {
+                    self.tetromino.spin += 1;
+                }
+                1 => {
                     coordinates[0] -= 9;
                     coordinates[2] += 9;
                     coordinates[3] += 18;
+                    self.tetromino.spin -= 1;
                 }
-            }
-            Cell::S => {
-                if self.tetromino.orientation == Orientation::North {
+                _ => return coordinates,
+            },
+            Cell::S => match self.tetromino.spin {
+                0 => {
                     coordinates[0] += 21;
                     coordinates[1] += 1;
-                    self.tetromino.orientation = Orientation::East
-                } else {
+                    self.tetromino.spin += 1;
+                }
+                1 => {
                     coordinates[0] -= 21;
                     coordinates[1] -= 1;
-                    self.tetromino.orientation = Orientation::North
+                    self.tetromino.spin -= 1;
                 }
-            }
-            Cell::Z => {
-                if self.tetromino.orientation == Orientation::North {
+                _ => return coordinates,
+            },
+            Cell::Z => match self.tetromino.spin {
+                0 => {
                     coordinates[1] += 20;
                     coordinates[2] += 2;
-                    self.tetromino.orientation = Orientation::East
-                } else {
+                    self.tetromino.spin += 1;
+                }
+                1 => {
                     coordinates[1] -= 20;
                     coordinates[2] -= 2;
-                    self.tetromino.orientation = Orientation::North
+                    self.tetromino.spin -= 1;
                 }
-            }
+                _ => return coordinates,
+            },
             Cell::O => return coordinates,
-            Cell::L => {
-                if self.tetromino.orientation == Orientation::North {
+            Cell::L => match self.tetromino.spin {
+                0 => {
                     coordinates[1] += 11;
                     coordinates[2] -= 11;
                     coordinates[3] -= 2;
-                    self.tetromino.orientation = Orientation::East
-                } else if self.tetromino.orientation == Orientation::East {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] += 20;
-                    self.tetromino.orientation = Orientation::South
-                } else if self.tetromino.orientation == Orientation::South {
-                    coordinates[1] += 11;
-                    coordinates[2] -= 11;
-                    coordinates[3] += 2;
-                    self.tetromino.orientation = Orientation::West
-                } else if self.tetromino.orientation == Orientation::West {
-                    coordinates[1] -= 11;
-                    coordinates[2] += 11;
-                    coordinates[3] -= 20;
-                    self.tetromino.orientation = Orientation::North;
+                    self.tetromino.spin += 1;
                 }
-            }
-            Cell::J => {
-                if self.tetromino.orientation == Orientation::North {
+                1 => {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] += 20;
+                    self.tetromino.spin += 1;
+                }
+                2 => {
+                    coordinates[1] += 11;
+                    coordinates[2] -= 11;
+                    coordinates[3] += 2;
+                    self.tetromino.spin += 1;
+                }
+                3 => {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] -= 20;
+                    self.tetromino.spin -= 3;
+                }
+                _ => return coordinates,
+            },
+            Cell::J => match self.tetromino.spin {
+                0 => {
                     coordinates[1] += 11;
                     coordinates[2] -= 11;
                     coordinates[3] += 20;
-                    self.tetromino.orientation = Orientation::East
-                } else if self.tetromino.orientation == Orientation::East {
+                    self.tetromino.spin += 1;
+                }
+                1 => {
                     coordinates[1] -= 11;
                     coordinates[2] += 11;
                     coordinates[3] += 2;
-                    self.tetromino.orientation = Orientation::South
-                } else if self.tetromino.orientation == Orientation::South {
+                    self.tetromino.spin += 1;
+                }
+                2 => {
                     coordinates[1] += 11;
                     coordinates[2] -= 11;
                     coordinates[3] -= 20;
-                    self.tetromino.orientation = Orientation::West
-                } else if self.tetromino.orientation == Orientation::West {
+                    self.tetromino.spin += 1;
+                }
+                3 => {
                     coordinates[1] -= 11;
                     coordinates[2] += 11;
                     coordinates[3] -= 2;
-                    self.tetromino.orientation = Orientation::North;
+                    self.tetromino.spin -= 3;
                 }
-            }
+                _ => return coordinates,
+            },
             Cell::Empty => panic!("if this panics we really have a problem"),
         }
         coordinates
@@ -390,14 +402,6 @@ enum Move {
     Down,
     Turn,
     // Nothing,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum Orientation {
-    North,
-    South,
-    West,
-    East,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
