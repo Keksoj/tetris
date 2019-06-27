@@ -4,7 +4,7 @@ use rand::{
     Rng,
 };
 use std::io::{Read, Write};
-use std::{thread, time};
+// use std::{thread, time};
 use termion::raw::IntoRawMode;
 use termion::raw::RawTerminal;
 use termion::{clear, cursor};
@@ -12,7 +12,7 @@ use termion::{clear, cursor};
 pub struct Game<R, W: Write> {
     stdout: W,
     stdin: R,
-    speed: u64,
+    speed: u128,
     tetromino: Tetromino,
     // the "pile" is where the non-moving tetrominoes are piled
     pile: [Cell; 210],
@@ -40,7 +40,7 @@ impl<R: Read, W: Write> Game<R, W> {
         Game {
             stdout: stdout.into_raw_mode().unwrap(),
             stdin: stdin,
-            speed: 500,
+            speed: 800,
             tetromino: Tetromino {
                 blocks: [174, 175, 176, 185],
                 name: Cell::T,
@@ -53,14 +53,20 @@ impl<R: Read, W: Write> Game<R, W> {
     }
 
     pub fn run(&mut self) {
+
+        let mut last_tick = std::time::SystemTime::now();
+
         loop {
             self.take_directions(); // moves
 
-            self.display_the_board();
-            self.clear_full_rows(); //
-            self.game_over(); // checks if game is over
-            thread::sleep(time::Duration::from_millis(self.speed));
-            self.tick();
+            let elapsed_since_last_tick = last_tick.elapsed().unwrap().as_millis();
+            let should_update = elapsed_since_last_tick >= self.speed;
+            if should_update {
+                self.clear_full_rows(); //
+                self.game_over(); // checks if game is over
+                self.tick();
+                last_tick = std::time::SystemTime::now();
+            }
         }
     }
 
@@ -80,7 +86,7 @@ impl<R: Read, W: Write> Game<R, W> {
                 }
                 // increase score and difficulty
                 self.score += 1;
-                self.speed -= 20;
+                self.speed -= 10;
             }
         }
     }
@@ -185,6 +191,7 @@ impl<R: Read, W: Write> Game<R, W> {
     // This set the new position of the tetromino
     fn settle_the_move(&mut self, coordinates: [u8; 4]) {
         self.tetromino.blocks = coordinates;
+        self.display_the_board();
     }
 
     fn display_the_board(&mut self) {
