@@ -25,7 +25,7 @@ pub struct Game<R, W: Write> {
 pub struct Tetromino {
     pub blocks: [u8; 4], // 4 coordinates
     pub name: Cell,
-    pub spin: u8, // keeps track of the number of turnsg
+    pub spin: u8, // keeps track of the number of turns
 }
 
 impl Clone for Tetromino {
@@ -33,6 +33,7 @@ impl Clone for Tetromino {
         *self
     }
 }
+
 
 impl<R: Read, W: Write> Game<R, W> {
     // Set a new empty game
@@ -57,14 +58,14 @@ impl<R: Read, W: Write> Game<R, W> {
         let mut last_tick = std::time::SystemTime::now();
 
         loop {
-            self.take_directions(); // moves
+            // takes user input and move the shape accordingly
+            self.take_directions();
 
-            let elapsed_since_last_tick = last_tick.elapsed().unwrap().as_millis();
-            let should_update = elapsed_since_last_tick >= self.speed;
-            if should_update {
-                self.clear_full_rows(); //
-                self.game_over(); // checks if game is over
+            // check if we reached time to tick again, then tick
+            if last_tick.elapsed().unwrap().as_millis() >= self.speed {
+                self.game_over(); // sets a game over if necessary
                 self.tick();
+                self.clear_full_rows();
                 last_tick = std::time::SystemTime::now();
             }
         }
@@ -84,7 +85,7 @@ impl<R: Read, W: Write> Game<R, W> {
                 for i in 200..210 {
                     self.pile[i] = Cell::Empty
                 }
-                // increase score and difficulty
+                // increase score and speed
                 self.score += 1;
                 self.speed -= 10;
             }
@@ -121,7 +122,7 @@ impl<R: Read, W: Write> Game<R, W> {
     fn take_directions(&mut self) {
         // should be some nice error wrapping
         let mut b = [0];
-        let mut mv: Move;
+        let mv: Move;
         self.stdin.read(&mut b).unwrap();
         match b[0] {
             b'i' => mv = Move::Turn,
@@ -143,7 +144,7 @@ impl<R: Read, W: Write> Game<R, W> {
     }
 
     fn get_new_coordinates(&mut self, mv: Move) -> [u8; 4] {
-        let mut coordinates: [u8; 4];
+        let coordinates: [u8; 4];
         match mv {
             Move::Left => coordinates = self.push_left(),
             Move::Right => coordinates = self.push_right(),
@@ -158,8 +159,9 @@ impl<R: Read, W: Write> Game<R, W> {
 
     fn check_for_collisions(&mut self, coordinates: [u8; 4], mv: Move) -> bool {
         let mut no_collision = true;
-        // Check for collision with the wall (overlapping the % 10 frontier)
+
         for i in coordinates.iter() {
+            // Check for collision with the wall (overlapping the % 10 frontier)
             if i % 10 == 0 {
                 for i in coordinates.iter() {
                     if (i + 1) % 10 == 0 {
@@ -167,19 +169,29 @@ impl<R: Read, W: Write> Game<R, W> {
                     }
                 }
             }
-        }
-        // check for collisions with the pile
-        for i in coordinates.iter() {
+
+            // check for collisions with the pile
             if self.pile[*i as usize] != Cell::Empty {
                 no_collision = false;
             }
-        }
-        // check for collision with the bottom
-        for i in coordinates.iter() {
+
+            // check for collisions with the bottom
             if i < &10 {
                 no_collision = false;
             }
         }
+
+        // since a vertical I tetromino doesn't overlapp the wall border (% 10),
+        // I have the sad duty to implement an extra rule
+        if self.tetromino.name == Cell::I {
+            if (mv == Move::Left && (coordinates[0] + 1) % 10 == 0)
+                || (mv == Move::Right && (coordinates[0]) % 10 == 0)
+            {
+                no_collision = false;
+            }
+
+        }
+
         // in case of a turn collision, set the tetromino's spin back to what it was
         if !no_collision && mv == Move::Turn {
             self.tetromino.spin -= 1;
@@ -205,7 +217,15 @@ impl<R: Read, W: Write> Game<R, W> {
 
         // Display the whole damn thing
         write!(self.stdout, "{}{}", clear::All, cursor::Goto(1, 1)).unwrap();
-        for line in self.board.chunks(10).rev() {
+
+        // the bottom line is empty for logic purposes, suppress it
+        let mut board_to_draw = [Cell::Empty; 200];
+        for i in 0..200 {
+            board_to_draw[i] = self.board[i + 10];
+        }
+
+        for line in board_to_draw.chunks(10).rev() {
+            // display each lines two times
             for _i in 0..2 {
                 self.stdout.write(b"|").unwrap();
                 for &cell in line.iter() {
@@ -308,43 +328,41 @@ impl<R: Read, W: Write> Game<R, W> {
                 }
                 self.tetromino.spin += 1;
             }
-            1 => {
-                match self.tetromino.name {
-                    Cell::T => {
-                        coordinates[3] -= 11;
-                        self.tetromino.spin += 1;
-                    }
-                    Cell::L => {
-                        coordinates[1] -= 11;
-                        coordinates[2] += 11;
-                        coordinates[3] += 20;
-                        self.tetromino.spin += 1;
-                    }
-                    Cell::J => {
-                        coordinates[1] -= 11;
-                        coordinates[2] += 11;
-                        coordinates[3] += 2;
-                        self.tetromino.spin += 1;
-                    }
-                    Cell::I => {
-                        coordinates[0] -= 9;
-                        coordinates[2] += 9;
-                        coordinates[3] += 18;
-                        self.tetromino.spin += 1;
-                    }
-                    Cell::S => {
-                        coordinates[0] -= 21;
-                        coordinates[1] -= 1;
-                        self.tetromino.spin -= 1;
-                    }
-                    Cell::Z => {
-                        coordinates[1] -= 20;
-                        coordinates[2] -= 2;
-                        self.tetromino.spin -= 1;
-                    }
-                    _ => return coordinates,
+            1 => match self.tetromino.name {
+                Cell::T => {
+                    coordinates[3] -= 11;
+                    self.tetromino.spin += 1;
                 }
-            }
+                Cell::L => {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] += 20;
+                    self.tetromino.spin += 1;
+                }
+                Cell::J => {
+                    coordinates[1] -= 11;
+                    coordinates[2] += 11;
+                    coordinates[3] += 2;
+                    self.tetromino.spin += 1;
+                }
+                Cell::I => {
+                    coordinates[0] -= 9;
+                    coordinates[2] += 9;
+                    coordinates[3] += 18;
+                    self.tetromino.spin -= 1; // return to the first spin
+                }
+                Cell::S => {
+                    coordinates[0] -= 21;
+                    coordinates[1] -= 1;
+                    self.tetromino.spin -= 1;
+                }
+                Cell::Z => {
+                    coordinates[1] -= 20;
+                    coordinates[2] -= 2;
+                    self.tetromino.spin -= 1;
+                }
+                _ => return coordinates,
+            },
             2 => {
                 match self.tetromino.name {
                     Cell::T => coordinates[2] += 9,

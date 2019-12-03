@@ -1,48 +1,23 @@
 # A minimal rust implementation of Tetris
 
-This exercise fullfills a threefold learning puropose : refactoring, refactoring, and refactoring.
+The goal of the exercise is to run the most minimalist terminal-running Tetris. 
+Rendering is done using Termion and that's about it.
 
-## What data type to chose ?
+## Install and run
 
-I first thought every cell would be best represented by a `u8`, either 0 (empty) or 1 (filled by a T shape) or 2 (filled by a I shape) etc.
-The board was an array of byte arrays:
+Be sure so [install Rust](https://www.rust-lang.org/learn/get-started) first.
 
-```rust
-board: [[u8; 10]; 21]
+Clone the repository, go the directory, run with cargo
+
+```sh
+git clone https://github.com/Keksoj/tetris.git
+cd tetris
+cargo run
 ```
 
-Whichs makes for nice (x, Y) coordinates:
+## The challenges and the solutions
 
-```rust
-board[x_coordinate][y_coordinate] = assign_a_value;
-```
-
-Thus the tetrominoes (or shapes) would be a struct of four points:
-
-```rust
-struct Tetromino {
-  one: (u8, u8),
-  two: (u8, u8),
-  three: (u8, u8),
-  four: (u8, u8),
-}
-```
-
-This is refactorable into
-
-```rust
-struct Tetromino {
-  blocks: [[u8; 2]; 4],
-}
-```
-
-However, having a set of coordinates is more painfull than helpfull. Let's follow the lead of the UNIX creators, always striving for removing code, rather than adding any. So I removed some brackets:
-
-```rust
-board: [u8; 210]
-```
-
-Which, once chunked, represents the board like this:
+I first thought of using (x, y) coordinates for representing the board and the shapes, but it is much easier to have just one axis and chuck it like so :
 
 ```rust
  200 201 202 203 204 205 206 207 208 209
@@ -61,6 +36,48 @@ struct Tetromino {
 }
 ```
 
-The gods of mathematics are with us, we can move a Tetromino one row down by doing `-= 10` on all its coordinate. `+= 1` to push it to the right, and so on.
+**Moving the pieces**
 
-The whole code has been refactored on and on, and will be, again and again. Getting the game working is done, the goal now is to learn the community standards of a code that is clean and easily understandable.
+* move a Tetromino one row down by doing `-= 10` on all its coordinate. 
+* `-= 1` to push it to the left, `+= 1` to the right
+* Turning is done by changing the coordinates depending on the shape, by and recording the "spin", the number of turns.
+
+**Detecting collisions**
+
+There are a number of elegant ways to do this but I chose the rookie method : 
+
+1. compute the new coordinates
+2. check for overlapping with the walls, the bottom, other pieces
+3. performing the move or not
+
+**Ticking down AND accepting moves from the player**
+
+Wether or not it's moved around by the player, the Tetromino has to tick down every, say, one second.
+This is a case study for multi-threading and other nightmares. 
+The easy way is to do this is to 
+
+1. set a mutable time stamp at every tick
+2. check the elapsed time since the last tick, and if it's time :
+  1. perform the tick
+  2. reset the time stamp to now
+
+
+```rust
+// set the mutable timestamp to now
+let mut last_tick = std::time::SystemTime::now();
+
+  loop {
+      // takes user input and move the shape accordingly
+      self.take_directions();
+
+      // check if we reached 1000 milliseconds
+      if last_tick.elapsed().unwrap().as_millis() >= 1000 {
+          
+          // perform the tick
+          self.tick();
+          
+          // reset the time stamp
+          last_tick = std::time::SystemTime::now();
+      }
+  }
+```
