@@ -1,2 +1,6 @@
 /target
 **/*.rs.bk
+event_loop_question.md
+question.md
+yandros_code.rs
+.gitignore

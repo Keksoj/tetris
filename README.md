@@ -3,6 +3,43 @@
 The goal of the exercise is to run the most minimalist terminal-running Tetris. 
 Rendering is done using Termion and that's about it.
 
+```
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|            OOOOOO            |
+|            OOOOOO            |
+|            OOOOOO            |
+|            OOOOOO            |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                           III|
+|                           III|
+|                           III|
+|                           III|
+|                           III|
+|                           III|
+|   ZZZ               ZZZ   III|
+|   ZZZ               ZZZ   III|
+|ZZZZZZTTT         ZZZZZZ   LLL|
+|ZZZZZZTTT         ZZZZZZ   LLL|
+|ZZZTTTTTTTTT      ZZZLLLLLLLLL|
+|ZZZTTTTTTTTT      ZZZLLLLLLLLL|
+--------------------------------
+```
+
 ## Install and run
 
 Be sure so [install Rust](https://www.rust-lang.org/learn/get-started) first.
@@ -58,8 +95,8 @@ The easy way is to do this is to
 
 1. set a mutable time stamp at every tick
 2. check the elapsed time since the last tick, and if it's time :
-  1. perform the tick
-  2. reset the time stamp to now
+3. perform the tick
+4. reset the time stamp to now
 
 
 ```rust
