@@ -14,13 +14,7 @@ fn main() {
     let stdout = stdout();
     let mut game = Game::new(stdin, stdout.lock());
 
-    println!(
-        "Use IJKL like so:\n
-          I: Turn
-J: left   K: down   L: right\n
-
-Q to panic"
-    );
+    println!("Use IJKL to move the pieces, Q to quit");
     thread::sleep(time::Duration::from_millis(2000));
 
     game.run();

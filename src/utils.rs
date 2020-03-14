@@ -12,7 +12,7 @@ use termion::{clear, cursor};
 pub struct Game<R, W: Write> {
     stdout: W,
     stdin: R,
-    speed: u128,
+    speed: u32,
     tetromino: Tetromino,
     // the "pile" is where the non-moving tetrominoes are piled
     pile: [Cell; 210],
@@ -62,7 +62,7 @@ impl<R: Read, W: Write> Game<R, W> {
             self.take_directions();
 
             // check if we reached time to tick again, then tick
-            if last_tick.elapsed().unwrap().as_millis() >= self.speed {
+            if last_tick.elapsed().unwrap().as_millis() as u32 >= self.speed {
                 self.game_over(); // sets a game over if necessary
                 self.tick();
                 self.clear_full_rows();
