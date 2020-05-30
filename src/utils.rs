@@ -103,8 +103,7 @@ impl<R: Read, W: Write> Game<R, W> {
         self.compute_the_next_move();
         self.check_for_collisions();
         if self.move_is_possible {
-            self.tetromino = self.next_move_tetromino;
-            self.display_the_board();
+            self.settle_the_move();
         } else {
             for coordinate in self.tetromino.coordinates.iter() {
                 self.stack[*coordinate as usize] = self.tetromino.name;
@@ -131,11 +130,16 @@ impl<R: Read, W: Write> Game<R, W> {
             self.compute_the_next_move();
             self.check_for_collisions();
             if self.move_is_possible {
-                self.tetromino = self.next_move_tetromino;
-                self.display_the_board();
+                self.settle_the_move();
             }
         }
     }
+
+    fn settle_the_move(&mut self) {
+        self.tetromino = self.next_move_tetromino;
+        self.display_the_board();
+    }
+
     fn check_for_collisions(&mut self) {
         self.move_is_possible = true;
         for i in self.next_move_tetromino.coordinates.iter() {
