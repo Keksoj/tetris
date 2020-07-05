@@ -13,12 +13,12 @@ pub struct Game<R, W: Write> {
     stdin: R,
     speed: u32,
     tetromino: Tetromino,
+    direction: Move,
     next_move_tetromino: Tetromino,
     move_is_possible: bool,
     stack: [Cell; 210],
     display_board: [Cell; 210],
     score: u32,
-    direction: Move,
 }
 
 #[derive(Debug, Copy)]
@@ -65,7 +65,7 @@ impl<R: Read, W: Write> Game<R, W> {
             self.take_directions();
 
             if last_tick.elapsed().unwrap().as_millis() as u32 >= self.speed {
-                self.game_over();
+                self.check_for_game_over();
                 self.tick();
                 self.clear_full_rows();
                 last_tick = std::time::SystemTime::now();
@@ -90,7 +90,7 @@ impl<R: Read, W: Write> Game<R, W> {
         }
     }
 
-    fn game_over(&mut self) {
+    fn check_for_game_over(&mut self) {
         for cell in 173..177 {
             if self.stack[cell as usize] != Cell::Empty {
                 panic!("game over at score {}", self.score)
@@ -105,16 +105,20 @@ impl<R: Read, W: Write> Game<R, W> {
         if self.move_is_possible {
             self.settle_the_move();
         } else {
-            for coordinate in self.tetromino.coordinates.iter() {
-                self.stack[*coordinate as usize] = self.tetromino.name;
-            }
-            self.generate_randow_new_tetromino();
+            self.freeze_and_next();
         }
         self.display_the_board();
     }
+    
+    fn freeze_and_next(&mut self) {
+        for coordinate in self.tetromino.coordinates.iter() {
+            self.stack[*coordinate as usize] = self.tetromino.name;
+        }
+        self.generate_randow_new_tetromino();
+    }
 
     fn take_directions(&mut self) {
-        // should be some nice error wrapping
+        // should be some nice error handling
         let mut b = [0];
         self.stdin.read(&mut b).unwrap();
         match b[0] {
@@ -123,7 +127,7 @@ impl<R: Read, W: Write> Game<R, W> {
             b'k' => self.direction = Move::Down,
             b'l' => self.direction = Move::Right,
             b'q' => panic!("c'est la panique !"),
-            _ => self.direction = Move::None, // should be some nice error handling
+            _ => self.direction = Move::None,
         }
 
         if self.direction != Move::None {
@@ -217,7 +221,7 @@ impl<R: Read, W: Write> Game<R, W> {
     }
 
     fn generate_randow_new_tetromino(&mut self) {
-        let name: Cell = rand::random(); // where does this random() come from ?
+        let name: Cell = rand::random();
         let new_tetromino = Tetromino {
             coordinates: match name {
                 Cell::T => [174, 175, 176, 185],
@@ -389,7 +393,7 @@ pub enum Cell {
     Empty,
 }
 
-// randomization stuff around chosing the next tetromino
+// randomization stuff
 impl Distribution<Cell> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Cell {
         match rng.gen_range(0, 7) {
