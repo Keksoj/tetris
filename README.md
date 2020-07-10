@@ -100,20 +100,17 @@ The easy way is to do this is to
 
 
 ```rust
-// set the mutable timestamp to now
 let mut last_tick = std::time::SystemTime::now();
 
   loop {
       // takes user input and move the shape accordingly
       self.take_directions();
 
-      // check if we reached 1000 milliseconds
       if last_tick.elapsed().unwrap().as_millis() >= 1000 {
           
-          // perform the tick
+          // move the shape one square down
           self.tick();
           
-          // reset the time stamp
           last_tick = std::time::SystemTime::now();
       }
   }

@@ -8,6 +8,216 @@ use termion::raw::IntoRawMode;
 use termion::raw::RawTerminal;
 use termion::{clear, cursor};
 
+#[derive(Debug, Copy)]
+pub struct Tetromino {
+    pub coordinates: [u8; 4],
+    pub name: Cell,
+    pub spin: u8,
+}
+impl Tetromino {
+    fn randow_new() -> Self {
+        let name: Cell = rand::random();
+        let new_tetromino = Self {
+            coordinates: match name {
+                Cell::T => [174, 175, 176, 185],
+                Cell::L => [184, 174, 194, 175],
+                Cell::J => [185, 175, 195, 174],
+                Cell::I => [175, 185, 195, 205],
+                Cell::S => [174, 175, 185, 186],
+                Cell::Z => [175, 176, 184, 185],
+                Cell::O => [174, 175, 185, 184],
+                Cell::Empty => panic!("The random_new tetromino function messed up."),
+            },
+            name,
+            spin: 0,
+        };
+        new_tetromino
+    }
+
+    fn move_it(&mut self, direction: &Move) {
+        match direction {
+            Move::Left => {
+                for i in 0..4 as usize {
+                    self.coordinates[i] -= 1;
+                }
+            }
+            Move::Right => {
+                for i in 0..4 as usize {
+                    self.coordinates[i] += 1;
+                }
+            }
+            Move::Down => {
+                for i in 0..4 as usize {
+                    self.coordinates[i] -= 10;
+                }
+            }
+            Move::Turn => {
+                match self.spin {
+                    0 => {
+                        match self.name {
+                            Cell::T => self.coordinates[0] -= 9,
+                            Cell::L => {
+                                self.coordinates[1] += 11;
+                                self.coordinates[2] -= 11;
+                                self.coordinates[3] -= 2;
+                            }
+                            Cell::J => {
+                                self.coordinates[1] += 11;
+                                self.coordinates[2] -= 11;
+                                self.coordinates[3] += 20;
+                            }
+                            Cell::I => {
+                                self.coordinates[0] += 9;
+                                self.coordinates[2] -= 9;
+                                self.coordinates[3] -= 18;
+                            }
+                            Cell::S => {
+                                self.coordinates[0] += 21;
+                                self.coordinates[1] += 1;
+                            }
+                            Cell::Z => {
+                                self.coordinates[1] += 20;
+                                self.coordinates[2] += 2;
+                            }
+                            _ => return,
+                        }
+                        self.spin += 1;
+                    }
+                    1 => match self.name {
+                        Cell::T => {
+                            self.coordinates[3] -= 11;
+                            self.spin += 1;
+                        }
+                        Cell::L => {
+                            self.coordinates[1] -= 11;
+                            self.coordinates[2] += 11;
+                            self.coordinates[3] += 20;
+                            self.spin += 1;
+                        }
+                        Cell::J => {
+                            self.coordinates[1] -= 11;
+                            self.coordinates[2] += 11;
+                            self.coordinates[3] += 2;
+                            self.spin += 1;
+                        }
+                        Cell::I => {
+                            self.coordinates[0] -= 9;
+                            self.coordinates[2] += 9;
+                            self.coordinates[3] += 18;
+                            self.spin -= 1; // return to the first spin
+                        }
+                        Cell::S => {
+                            self.coordinates[0] -= 21;
+                            self.coordinates[1] -= 1;
+                            self.spin -= 1;
+                        }
+                        Cell::Z => {
+                            self.coordinates[1] -= 20;
+                            self.coordinates[2] -= 2;
+                            self.spin -= 1;
+                        }
+                        _ => return,
+                    },
+                    2 => {
+                        match self.name {
+                            Cell::T => self.coordinates[2] += 9,
+                            Cell::L => {
+                                self.coordinates[1] += 11;
+                                self.coordinates[2] -= 11;
+                                self.coordinates[3] += 2;
+                            }
+                            Cell::J => {
+                                self.coordinates[1] += 11;
+                                self.coordinates[2] -= 11;
+                                self.coordinates[3] -= 20;
+                            }
+                            _ => return,
+                        };
+                        self.spin += 1;
+                    }
+                    3 => {
+                        match self.name {
+                            Cell::T => {
+                                self.coordinates[0] += 9;
+                                self.coordinates[3] += 11;
+                                self.coordinates[2] -= 9;
+                            }
+                            Cell::L => {
+                                self.coordinates[1] -= 11;
+                                self.coordinates[2] += 11;
+                                self.coordinates[3] -= 20;
+                            }
+                            Cell::J => {
+                                self.coordinates[1] -= 11;
+                                self.coordinates[2] += 11;
+                                self.coordinates[3] -= 2;
+                            }
+                            _ => return,
+                        };
+                        self.spin -= 3;
+                    }
+                    _ => return,
+                }
+            }
+            Move::None => return,
+        }
+    }
+}
+
+impl Clone for Tetromino {
+    fn clone(&self) -> Tetromino {
+        *self
+    }
+}
+
+pub struct GameBuilder<R, W: Write> {
+    stdout: W,
+    stdin: R,
+    speed: u32,
+    tetromino: Tetromino,
+    direction: Move,
+    next_move_tetromino: Tetromino,
+    move_is_possible: bool,
+    stack: [Cell; 210],
+    display_board: [Cell; 210],
+    score: u32,
+}
+
+impl<R: Read, W: Write> GameBuilder<R, W> {
+    pub fn new_default_game(stdin: R, stdout: W) -> GameBuilder<R, RawTerminal<W>> {
+        GameBuilder {
+            stdout: stdout.into_raw_mode().unwrap(),
+            stdin: stdin,
+            speed: 800,
+            tetromino: Tetromino::randow_new(),
+            direction: Move::None,
+            next_move_tetromino: Tetromino::randow_new(),
+            move_is_possible: true,
+            stack: [Cell::Empty; 210],
+            display_board: [Cell::Empty; 210],
+            score: 0,
+        }
+    }
+    pub fn with_initial_speed(mut self, tick: u32) -> Self {
+        self.speed = tick;
+        self
+    }
+    pub fn finish(self) -> Game<R, W> {
+        Game {
+            stdout: self.stdout,
+            stdin: self.stdin,
+            speed: self.speed,
+            tetromino: self.tetromino,
+            direction: self.direction,
+            next_move_tetromino: self.next_move_tetromino,
+            move_is_possible: self.move_is_possible,
+            stack: self.stack,
+            display_board: self.display_board,
+            score: self.score,
+        }
+    }
+}
+
 pub struct Game<R, W: Write> {
     stdout: W,
     stdin: R,
@@ -21,43 +231,7 @@ pub struct Game<R, W: Write> {
     score: u32,
 }
 
-#[derive(Debug, Copy)]
-pub struct Tetromino {
-    pub coordinates: [u8; 4],
-    pub name: Cell,
-    pub spin: u8,
-}
-
-impl Clone for Tetromino {
-    fn clone(&self) -> Tetromino {
-        *self
-    }
-}
-
 impl<R: Read, W: Write> Game<R, W> {
-    pub fn new(stdin: R, stdout: W) -> Game<R, RawTerminal<W>> {
-        Game {
-            stdout: stdout.into_raw_mode().unwrap(),
-            stdin: stdin,
-            speed: 800,
-            tetromino: Tetromino {
-                coordinates: [174, 175, 176, 185],
-                name: Cell::T,
-                spin: 0,
-            },
-            direction: Move::None,
-            next_move_tetromino: Tetromino {
-                coordinates: [174, 175, 176, 185],
-                name: Cell::T,
-                spin: 0,
-            },
-            move_is_possible: true,
-            stack: [Cell::Empty; 210],
-            display_board: [Cell::Empty; 210],
-            score: 0,
-        }
-    }
-
     pub fn run(&mut self) {
         let mut last_tick = std::time::SystemTime::now();
 
@@ -109,12 +283,13 @@ impl<R: Read, W: Write> Game<R, W> {
         }
         self.display_the_board();
     }
-    
     fn freeze_and_next(&mut self) {
         for coordinate in self.tetromino.coordinates.iter() {
             self.stack[*coordinate as usize] = self.tetromino.name;
         }
-        self.generate_randow_new_tetromino();
+        self.tetromino = Tetromino::randow_new();
+        self.move_is_possible = true;
+        // self.generate_randow_new_tetromino();
     }
 
     fn take_directions(&mut self) {
@@ -220,155 +395,9 @@ impl<R: Read, W: Write> Game<R, W> {
         self.stdout.flush().unwrap();
     }
 
-    fn generate_randow_new_tetromino(&mut self) {
-        let name: Cell = rand::random();
-        let new_tetromino = Tetromino {
-            coordinates: match name {
-                Cell::T => [174, 175, 176, 185],
-                Cell::L => [184, 174, 194, 175],
-                Cell::J => [185, 175, 195, 174],
-                Cell::I => [175, 185, 195, 205],
-                Cell::S => [174, 175, 185, 186],
-                Cell::Z => [175, 176, 184, 185],
-                Cell::O => [174, 175, 185, 184],
-                Cell::Empty => panic!("problème de création aléatoire"),
-            },
-            name,
-            spin: 0,
-        };
-        self.tetromino = new_tetromino;
-        self.move_is_possible = true;
-    }
-
     fn compute_the_next_move(&mut self) {
         self.next_move_tetromino = self.tetromino;
-
-        match self.direction {
-            Move::Left => {
-                for i in 0..4 as usize {
-                    self.next_move_tetromino.coordinates[i] -= 1;
-                }
-            }
-            Move::Right => {
-                for i in 0..4 as usize {
-                    self.next_move_tetromino.coordinates[i] += 1;
-                }
-            }
-            Move::Down => {
-                for i in 0..4 as usize {
-                    self.next_move_tetromino.coordinates[i] -= 10;
-                }
-            }
-            Move::Turn => {
-                match self.tetromino.spin {
-                    0 => {
-                        match self.tetromino.name {
-                            Cell::T => self.next_move_tetromino.coordinates[0] -= 9,
-                            Cell::L => {
-                                self.next_move_tetromino.coordinates[1] += 11;
-                                self.next_move_tetromino.coordinates[2] -= 11;
-                                self.next_move_tetromino.coordinates[3] -= 2;
-                            }
-                            Cell::J => {
-                                self.next_move_tetromino.coordinates[1] += 11;
-                                self.next_move_tetromino.coordinates[2] -= 11;
-                                self.next_move_tetromino.coordinates[3] += 20;
-                            }
-                            Cell::I => {
-                                self.next_move_tetromino.coordinates[0] += 9;
-                                self.next_move_tetromino.coordinates[2] -= 9;
-                                self.next_move_tetromino.coordinates[3] -= 18;
-                            }
-                            Cell::S => {
-                                self.next_move_tetromino.coordinates[0] += 21;
-                                self.next_move_tetromino.coordinates[1] += 1;
-                            }
-                            Cell::Z => {
-                                self.next_move_tetromino.coordinates[1] += 20;
-                                self.next_move_tetromino.coordinates[2] += 2;
-                            }
-                            _ => return,
-                        }
-                        self.next_move_tetromino.spin += 1;
-                    }
-                    1 => match self.tetromino.name {
-                        Cell::T => {
-                            self.next_move_tetromino.coordinates[3] -= 11;
-                            self.next_move_tetromino.spin += 1;
-                        }
-                        Cell::L => {
-                            self.next_move_tetromino.coordinates[1] -= 11;
-                            self.next_move_tetromino.coordinates[2] += 11;
-                            self.next_move_tetromino.coordinates[3] += 20;
-                            self.next_move_tetromino.spin += 1;
-                        }
-                        Cell::J => {
-                            self.next_move_tetromino.coordinates[1] -= 11;
-                            self.next_move_tetromino.coordinates[2] += 11;
-                            self.next_move_tetromino.coordinates[3] += 2;
-                            self.next_move_tetromino.spin += 1;
-                        }
-                        Cell::I => {
-                            self.next_move_tetromino.coordinates[0] -= 9;
-                            self.next_move_tetromino.coordinates[2] += 9;
-                            self.next_move_tetromino.coordinates[3] += 18;
-                            self.next_move_tetromino.spin -= 1; // return to the first spin
-                        }
-                        Cell::S => {
-                            self.next_move_tetromino.coordinates[0] -= 21;
-                            self.next_move_tetromino.coordinates[1] -= 1;
-                            self.next_move_tetromino.spin -= 1;
-                        }
-                        Cell::Z => {
-                            self.next_move_tetromino.coordinates[1] -= 20;
-                            self.next_move_tetromino.coordinates[2] -= 2;
-                            self.next_move_tetromino.spin -= 1;
-                        }
-                        _ => return,
-                    },
-                    2 => {
-                        match self.tetromino.name {
-                            Cell::T => self.next_move_tetromino.coordinates[2] += 9,
-                            Cell::L => {
-                                self.next_move_tetromino.coordinates[1] += 11;
-                                self.next_move_tetromino.coordinates[2] -= 11;
-                                self.next_move_tetromino.coordinates[3] += 2;
-                            }
-                            Cell::J => {
-                                self.next_move_tetromino.coordinates[1] += 11;
-                                self.next_move_tetromino.coordinates[2] -= 11;
-                                self.next_move_tetromino.coordinates[3] -= 20;
-                            }
-                            _ => return,
-                        };
-                        self.next_move_tetromino.spin += 1;
-                    }
-                    3 => {
-                        match self.tetromino.name {
-                            Cell::T => {
-                                self.next_move_tetromino.coordinates[0] += 9;
-                                self.next_move_tetromino.coordinates[3] += 11;
-                                self.next_move_tetromino.coordinates[2] -= 9;
-                            }
-                            Cell::L => {
-                                self.next_move_tetromino.coordinates[1] -= 11;
-                                self.next_move_tetromino.coordinates[2] += 11;
-                                self.next_move_tetromino.coordinates[3] -= 20;
-                            }
-                            Cell::J => {
-                                self.next_move_tetromino.coordinates[1] -= 11;
-                                self.next_move_tetromino.coordinates[2] += 11;
-                                self.next_move_tetromino.coordinates[3] -= 2;
-                            }
-                            _ => return,
-                        };
-                        self.next_move_tetromino.spin -= 3;
-                    }
-                    _ => return,
-                }
-            }
-            Move::None => return,
-        }
+        self.next_move_tetromino.move_it(&self.direction);
     }
 }
 
