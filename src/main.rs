@@ -1,5 +1,7 @@
 mod game;
 mod tetromino;
+mod cell;
+
 use game::Game;
 use std::{thread, time};
 use termion;

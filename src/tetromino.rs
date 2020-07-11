@@ -1,8 +1,5 @@
+use crate::cell::Cell;
 use crate::game::Move;
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
-};
 
 #[derive(Debug, Copy)]
 pub struct Tetromino {
@@ -15,17 +12,8 @@ impl Tetromino {
     pub fn randow_new() -> Self {
         let name: Cell = rand::random();
         let new_tetromino = Self {
-            coordinates: match name {
-                Cell::T => [174, 175, 176, 185],
-                Cell::L => [184, 174, 194, 175],
-                Cell::J => [185, 175, 195, 174],
-                Cell::I => [175, 185, 195, 205],
-                Cell::S => [174, 175, 185, 186],
-                Cell::Z => [175, 176, 184, 185],
-                Cell::O => [174, 175, 185, 184],
-                Cell::Empty => panic!("The random_new tetromino function messed up."),
-            },
             name,
+            coordinates: name.to_coordinates(),
             spin: 0,
         };
         new_tetromino
@@ -164,33 +152,5 @@ impl Tetromino {
 impl Clone for Tetromino {
     fn clone(&self) -> Tetromino {
         *self
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub enum Cell {
-    T,
-    I,
-    S,
-    Z,
-    O,
-    L,
-    J,
-    Empty,
-}
-
-// randomization stuff
-impl Distribution<Cell> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Cell {
-        match rng.gen_range(0, 7) {
-            0 => Cell::T,
-            1 => Cell::I,
-            2 => Cell::S,
-            3 => Cell::Z,
-            4 => Cell::O,
-            5 => Cell::L,
-            6 => Cell::J,
-            _ => Cell::T,
-        }
     }
 }

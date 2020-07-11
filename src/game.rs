@@ -7,7 +7,8 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
 };
 
-use crate::tetromino::{Cell, Tetromino};
+use crate::cell::Cell;
+use crate::tetromino::Tetromino;
 
 pub struct Game<R, W: Write> {
     stdout: W,
@@ -180,17 +181,7 @@ impl<R: Read, W: Write> Game<R, W> {
             for _i in 0..2 {
                 self.stdout.write(b"|").unwrap();
                 for &cell in line.iter() {
-                    let symbol = match cell {
-                        Cell::Empty => b"   ",
-                        Cell::T => b"TTT",
-                        Cell::I => b"III",
-                        Cell::S => b"SSS",
-                        Cell::Z => b"ZZZ",
-                        Cell::O => b"OOO",
-                        Cell::L => b"LLL",
-                        Cell::J => b"JJJ",
-                    };
-                    self.stdout.write(symbol).unwrap();
+                    self.stdout.write(cell.to_printable_bytes()).unwrap();
                 }
                 self.stdout.write(b"|\n\r").unwrap();
             }
