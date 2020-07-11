@@ -170,58 +170,10 @@ impl Clone for Tetromino {
     }
 }
 
-pub struct GameBuilder<R, W: Write> {
-    stdout: W,
-    stdin: R,
-    speed: u32,
-    tetromino: Tetromino,
-    direction: Move,
-    next_move_tetromino: Tetromino,
-    move_is_possible: bool,
-    stack: [Cell; 210],
-    display_board: [Cell; 210],
-    score: u32,
-}
-
-impl<R: Read, W: Write> GameBuilder<R, W> {
-    pub fn new_default_game(stdin: R, stdout: W) -> GameBuilder<R, RawTerminal<W>> {
-        GameBuilder {
-            stdout: stdout.into_raw_mode().unwrap(),
-            stdin: stdin,
-            speed: 800,
-            tetromino: Tetromino::randow_new(),
-            direction: Move::None,
-            next_move_tetromino: Tetromino::randow_new(),
-            move_is_possible: true,
-            stack: [Cell::Empty; 210],
-            display_board: [Cell::Empty; 210],
-            score: 0,
-        }
-    }
-    pub fn with_initial_speed(mut self, tick: u32) -> Self {
-        self.speed = tick;
-        self
-    }
-    pub fn finish(self) -> Game<R, W> {
-        Game {
-            stdout: self.stdout,
-            stdin: self.stdin,
-            speed: self.speed,
-            tetromino: self.tetromino,
-            direction: self.direction,
-            next_move_tetromino: self.next_move_tetromino,
-            move_is_possible: self.move_is_possible,
-            stack: self.stack,
-            display_board: self.display_board,
-            score: self.score,
-        }
-    }
-}
-
 pub struct Game<R, W: Write> {
     stdout: W,
     stdin: R,
-    speed: u32,
+    tick_interval: u32,
     tetromino: Tetromino,
     direction: Move,
     next_move_tetromino: Tetromino,
@@ -232,13 +184,29 @@ pub struct Game<R, W: Write> {
 }
 
 impl<R: Read, W: Write> Game<R, W> {
+    pub fn new(stdin: R, stdout: W, tick_interval: u32) -> Game<R, RawTerminal<W>> {
+        Game {
+            stdout: stdout.into_raw_mode().unwrap(),
+            stdin,
+            tick_interval,
+            tetromino: Tetromino::randow_new(),
+            direction: Move::None,
+            next_move_tetromino: Tetromino::randow_new(),
+            move_is_possible: true,
+            stack: [Cell::Empty; 210],
+            display_board: [Cell::Empty; 210],
+            score: 0,
+        }
+    }
+
+
     pub fn run(&mut self) {
         let mut last_tick = std::time::SystemTime::now();
 
         loop {
             self.take_directions();
 
-            if last_tick.elapsed().unwrap().as_millis() as u32 >= self.speed {
+            if last_tick.elapsed().unwrap().as_millis() as u32 >= self.tick_interval {
                 self.check_for_game_over();
                 self.tick();
                 self.clear_full_rows();
@@ -259,7 +227,7 @@ impl<R: Read, W: Write> Game<R, W> {
                     self.stack[i] = Cell::Empty
                 }
                 self.score += 1;
-                self.speed -= 10;
+                self.tick_interval -= 10;
             }
         }
     }

@@ -4,13 +4,11 @@
 mod utils;
 use std::{thread, time};
 use termion;
-use utils::GameBuilder;
+use crate::utils::Game;
 
 fn main() {
     let stdout = std::io::stdout();
-    let mut game = GameBuilder::new_default_game(termion::async_stdin(), stdout.lock())
-        .with_initial_speed(800)
-        .finish();
+    let mut game = Game::new(termion::async_stdin(), stdout.lock(), 800);
     // let mut game = Game::new(termion::async_stdin(), stdout.lock());
 
     println!("Use IJKL to move the pieces, Q to quit");
