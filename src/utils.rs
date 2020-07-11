@@ -283,6 +283,7 @@ impl<R: Read, W: Write> Game<R, W> {
         }
         self.display_the_board();
     }
+    
     fn freeze_and_next(&mut self) {
         for coordinate in self.tetromino.coordinates.iter() {
             self.stack[*coordinate as usize] = self.tetromino.name;
@@ -304,7 +305,6 @@ impl<R: Read, W: Write> Game<R, W> {
             b'q' => panic!("c'est la panique !"),
             _ => self.direction = Move::None,
         }
-
         if self.direction != Move::None {
             self.compute_the_next_move();
             self.check_for_collisions();
@@ -312,6 +312,11 @@ impl<R: Read, W: Write> Game<R, W> {
                 self.settle_the_move();
             }
         }
+    }
+
+    fn compute_the_next_move(&mut self) {
+        self.next_move_tetromino = self.tetromino;
+        self.next_move_tetromino.move_it(&self.direction);
     }
 
     fn settle_the_move(&mut self) {
@@ -393,11 +398,6 @@ impl<R: Read, W: Write> Game<R, W> {
             self.stdout.write(b"-").unwrap();
         }
         self.stdout.flush().unwrap();
-    }
-
-    fn compute_the_next_move(&mut self) {
-        self.next_move_tetromino = self.tetromino;
-        self.next_move_tetromino.move_it(&self.direction);
     }
 }
 
