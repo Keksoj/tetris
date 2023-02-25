@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 rand = "0.6.5"
-termion = "1"
+termion = "^2.0.1"

@@ -4,15 +4,18 @@ use std::io::{Read, Write};
 use std::time::SystemTime;
 use termion::{
     clear, cursor,
+    event::Key,
+    input::TermRead,
     raw::{IntoRawMode, RawTerminal},
+    AsyncReader,
 };
 
 use crate::cell::Cell;
 use crate::tetromino::Tetromino;
 
-pub struct Game<R, W: Write> {
+pub struct Game<W: Write> {
     stdout: W,
-    stdin: R,
+    stdin: AsyncReader,
     tick_interval: u32,
     tetromino: Tetromino,
     direction: Move,
@@ -23,8 +26,8 @@ pub struct Game<R, W: Write> {
     score: u32,
 }
 
-impl<R: Read, W: Write> Game<R, W> {
-    pub fn new(stdin: R, stdout: W, tick_interval: u32) -> Game<R, RawTerminal<W>> {
+impl<W: Write> Game<W> {
+    pub fn new(stdin: AsyncReader, stdout: W, tick_interval: u32) -> Game<RawTerminal<W>> {
         Game {
             stdout: stdout.into_raw_mode().unwrap(),
             stdin,
@@ -54,9 +57,13 @@ impl<R: Read, W: Write> Game<R, W> {
 
     fn take_directions(&mut self) {
         // should be some nice error handling
-        let mut b = [0];
-        self.stdin.read(&mut b).unwrap();
-        match b[0] {
+        // let mut b = [0];
+        // self.stdin.read(&mut b).unwrap();
+        let stdin = std::io::stdin();
+        let keys = stdin.keys();
+
+        /*
+        match keys[0] {
             b'i' => self.direction = Move::Turn,
             b'j' => self.direction = Move::Left,
             b'k' => self.direction = Move::Down,
@@ -64,6 +71,32 @@ impl<R: Read, W: Write> Game<R, W> {
             b'q' => panic!("c'est la panique !"),
             _ => self.direction = Move::None,
         }
+        */
+        for key in keys {
+            match key.unwrap() {
+                Key::Left => self.direction = Move::Left,
+                Key::Right => self.direction = Move::Right,
+                Key::Up => self.direction = Move::Turn,
+                Key::Down => self.direction = Move::Down,
+                Key::Char('q') => panic!("C'est la panique !"),
+                Key::Backspace
+                | Key::PageUp
+                | Key::PageDown
+                | Key::BackTab
+                | Key::Delete
+                | Key::Insert
+                | Key::Home
+                | Key::Alt(_)
+                | Key::Ctrl(_)
+                | Key::Null
+                | Key::End
+                | Key::Esc
+                | Key::F(_)
+                | _ => {} // maybe do some stuff here
+            }
+            break;
+        }
+
         if self.direction != Move::None {
             self.compute_the_next_move();
             self.check_for_collisions();
