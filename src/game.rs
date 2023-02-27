@@ -24,6 +24,7 @@ pub struct Game<W: Write> {
     stack: [Cell; 210],
     display_board: [Cell; 210],
     score: u32,
+    debug_message: String,
 }
 
 impl<W: Write> Game<W> {
@@ -39,13 +40,14 @@ impl<W: Write> Game<W> {
             stack: [Cell::Empty; 210],
             display_board: [Cell::Empty; 210],
             score: 0,
+            debug_message: String::new(),
         }
     }
 
     pub fn run(&mut self) {
         let mut last_tick = SystemTime::now();
         loop {
-            self.take_directions();
+            self.take_one_direction();
             if last_tick.elapsed().unwrap().as_millis() as u32 >= self.tick_interval {
                 self.check_for_game_over();
                 self.tick();
@@ -55,47 +57,23 @@ impl<W: Write> Game<W> {
         }
     }
 
-    fn take_directions(&mut self) {
-        // should be some nice error handling
-        // let mut b = [0];
-        // self.stdin.read(&mut b).unwrap();
+    fn take_one_direction(&mut self) {
         let stdin = std::io::stdin();
-        let keys = stdin.keys();
+        let mut keys = stdin.keys();
+        self.debug("Taking directions");
 
-        /*
-        match keys[0] {
-            b'i' => self.direction = Move::Turn,
-            b'j' => self.direction = Move::Left,
-            b'k' => self.direction = Move::Down,
-            b'l' => self.direction = Move::Right,
-            b'q' => panic!("c'est la panique !"),
-            _ => self.direction = Move::None,
+        let first_key = keys.next().unwrap();
+        self.debug(format!("Pressing key {:?}", first_key));
+        match first_key.unwrap() {
+            Key::Left => self.direction = Move::Left,
+            Key::Right => self.direction = Move::Right,
+            Key::Up => self.direction = Move::Turn,
+            Key::Down => self.direction = Move::Down,
+            Key::Char('q') => panic!("C'est la panique !"),
+            _ => return, // maybe do some stuff here
         }
-        */
-        for key in keys {
-            match key.unwrap() {
-                Key::Left => self.direction = Move::Left,
-                Key::Right => self.direction = Move::Right,
-                Key::Up => self.direction = Move::Turn,
-                Key::Down => self.direction = Move::Down,
-                Key::Char('q') => panic!("C'est la panique !"),
-                Key::Backspace
-                | Key::PageUp
-                | Key::PageDown
-                | Key::BackTab
-                | Key::Delete
-                | Key::Insert
-                | Key::Home
-                | Key::Alt(_)
-                | Key::Ctrl(_)
-                | Key::Null
-                | Key::End
-                | Key::Esc
-                | Key::F(_)
-                | _ => {} // maybe do some stuff here
-            }
-            break;
-        }
+
+        self.debug(format!("So the next move is : {:?}", self.direction));
 
         if self.direction != Move::None {
             self.compute_the_next_move();
@@ -203,6 +181,9 @@ impl<W: Write> Game<W> {
 
         write!(self.stdout, "{}{}", clear::All, cursor::Goto(1, 1)).unwrap();
 
+        self.stdout.write(self.debug_message.as_bytes()).unwrap();
+        self.debug_message = String::new();
+
         // the bottom line is empty for logic purposes, suppress it
         let mut board_to_draw = [Cell::Empty; 200];
         for i in 0..200 {
@@ -224,9 +205,17 @@ impl<W: Write> Game<W> {
         }
         self.stdout.flush().unwrap();
     }
+
+    fn debug<S>(&mut self, message: S)
+    where
+        S: ToString,
+    {
+        self.debug_message.push_str(&message.to_string());
+        self.debug_message.push(' ');
+    }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Move {
     Left,
     Right,
